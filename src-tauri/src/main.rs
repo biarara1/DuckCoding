@@ -367,42 +367,69 @@ async fn install_tool(tool: String, method: String) -> Result<InstallResult, Str
     }
 }
 
-// GitHub Release API 响应结构
+// npm Registry API 响应结构
 #[derive(Deserialize, Debug)]
-struct GitHubRelease {
-    tag_name: String,
+struct NpmPackageInfo {
+    #[serde(rename = "dist-tags")]
+    dist_tags: NpmDistTags,
 }
 
-// 从GitHub获取最新版本
-async fn fetch_latest_version_from_github(repo: &str) -> Result<String, String> {
-    let url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+#[derive(Deserialize, Debug)]
+struct NpmDistTags {
+    latest: String,
+}
+
+// 从npm镜像源获取最新版本
+async fn fetch_latest_version_from_npm(package_name: &str) -> Result<String, String> {
     let client = reqwest::Client::new();
 
-    let response = client
-        .get(&url)
-        .header("User-Agent", "DuckCoding-Desktop-App")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch from GitHub: {}", e))?;
+    // 优先使用国内镜像（淘宝npm镜像）
+    let mirrors = vec![
+        format!("https://registry.npmmirror.com/{}", package_name),
+        format!("https://registry.npmjs.org/{}", package_name),
+    ];
 
-    if !response.status().is_success() {
-        return Err(format!("GitHub API returned status: {}", response.status()));
+    for mirror_url in mirrors {
+        println!("Trying to fetch version from: {}", mirror_url);
+
+        match client
+            .get(&mirror_url)
+            .header("User-Agent", "DuckCoding-Desktop-App")
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    match response.json::<NpmPackageInfo>().await {
+                        Ok(package_info) => {
+                            println!("Successfully fetched version: {}", package_info.dist_tags.latest);
+                            return Ok(package_info.dist_tags.latest);
+                        }
+                        Err(e) => {
+                            println!("Failed to parse response from {}: {}", mirror_url, e);
+                            continue;
+                        }
+                    }
+                } else {
+                    println!("Failed to fetch from {}: status {}", mirror_url, response.status());
+                    continue;
+                }
+            }
+            Err(e) => {
+                println!("Request to {} failed: {}", mirror_url, e);
+                continue;
+            }
+        }
     }
 
-    let release: GitHubRelease = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse GitHub response: {}", e))?;
-
-    // 移除 'v' 前缀（如果有）
-    let version = release.tag_name.trim_start_matches('v').to_string();
-    Ok(version)
+    Err("所有npm镜像源均无法访问".to_string())
 }
 
 // 只检查更新，不执行
 #[tauri::command]
 async fn check_update(tool: String) -> Result<UpdateResult, String> {
-    println!("Checking updates for {} (pure Rust + GitHub API)", tool);
+    println!("Checking updates for {} (pure Rust + npm mirror)", tool);
 
     // 跨平台命令执行辅助函数
     let run_command = |cmd: &str| -> Result<std::process::Output, std::io::Error> {
@@ -486,29 +513,22 @@ async fn check_update(tool: String) -> Result<UpdateResult, String> {
 
     println!("Current version: {:?}", current_version);
 
-    // 从GitHub或DuckCoding服务器获取最新版本
-    let latest_version_result = match tool.as_str() {
-        "codex" => {
-            // CodeX: 从GitHub获取
-            fetch_latest_version_from_github("openai/codex-cli").await
-        },
-        "gemini-cli" => {
-            // Gemini CLI: 从GitHub获取
-            fetch_latest_version_from_github("google/gemini-cli").await
-        },
-        "claude-code" => {
-            // Claude Code: 暂时返回无法检查，后续可从DuckCoding服务器获取
-            // TODO: 实现从DuckCoding服务器获取版本信息
-            Err("Claude Code版本检查暂不支持（需要从Google Cloud获取）".to_string())
-        },
+    // 根据工具类型获取npm包名
+    let package_name = match tool.as_str() {
+        "claude-code" => "@anthropic-ai/claude-code",
+        "codex" => "@openai/codex",
+        "gemini-cli" => "@google/gemini-cli",
         _ => {
             return Err(format!("Unknown tool: {}", tool));
         }
     };
 
+    // 从npm镜像源获取最新版本
+    let latest_version_result = fetch_latest_version_from_npm(package_name).await;
+
     match latest_version_result {
         Ok(latest_version_str) => {
-            println!("Latest version from GitHub: {}", latest_version_str);
+            println!("Latest version from npm: {}", latest_version_str);
 
             // 比较版本
             let has_update = if let Some(ref current) = current_version {
@@ -527,7 +547,7 @@ async fn check_update(tool: String) -> Result<UpdateResult, String> {
         },
         Err(e) => {
             println!("Failed to fetch latest version: {}", e);
-            // 降级：如果GitHub失败，返回无法检查但不报错
+            // 降级：如果npm镜像源失败，返回无法检查但不报错
             Ok(UpdateResult {
                 success: true,
                 message: format!("无法检查更新: {}", e),
