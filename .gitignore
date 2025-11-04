@@ -32,3 +32,6 @@ src-tauri/Cargo.lock
 
 # TypeScript
 *.tsbuildinfo
+
+# Mirror server (不上传到git)
+mirror-server/

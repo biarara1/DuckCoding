@@ -254,50 +254,69 @@ async fn install_tool(tool: String, method: String) -> Result<InstallResult, Str
 
     match tool.as_str() {
         "claude-code" => {
-            // Claude Code 使用官方安装脚本
-            #[cfg(target_os = "windows")]
-            {
-                // Windows: irm https://claude.ai/install.ps1 | iex
-                let output = Command::new("powershell")
+            if method == "npm" {
+                // npm 安装
+                let output = Command::new("npm")
                     .env("PATH", get_extended_path())
-                    .args(&[
-                        "-Command",
-                        "irm https://claude.ai/install.ps1 | iex"
-                    ])
+                    .args(&["install", "-g", "@anthropic-ai/claude-code"])
                     .output()
-                    .map_err(|e| format!("Failed to execute installation: {}", e))?;
+                    .map_err(|e| format!("Failed to execute npm: {}", e))?;
 
                 if output.status.success() {
                     Ok(InstallResult {
                         success: true,
-                        message: "Claude Code installed successfully".to_string(),
+                        message: "Claude Code installed successfully via npm".to_string(),
                         output: String::from_utf8_lossy(&output.stdout).to_string(),
                     })
                 } else {
-                    Err(format!("Installation failed: {}", String::from_utf8_lossy(&output.stderr)))
+                    Err(format!("npm installation failed: {}", String::from_utf8_lossy(&output.stderr)))
                 }
-            }
+            } else {
+                // official: 使用DuckCoding镜像安装脚本
+                #[cfg(target_os = "windows")]
+                {
+                    // Windows: irm https://duckcoding.com/mirrors/claude-code/install.ps1 | iex
+                    let output = Command::new("powershell")
+                        .env("PATH", get_extended_path())
+                        .args(&[
+                            "-Command",
+                            "irm https://duckcoding.com/mirrors/claude-code/install.ps1 | iex"
+                        ])
+                        .output()
+                        .map_err(|e| format!("Failed to execute installation: {}", e))?;
 
-            #[cfg(not(target_os = "windows"))]
-            {
-                // macOS/Linux: curl -fsSL https://claude.ai/install.sh | bash
-                let output = Command::new("sh")
-                    .env("PATH", get_extended_path())
-                    .args(&[
-                        "-c",
-                        "curl -fsSL https://claude.ai/install.sh | bash"
-                    ])
-                    .output()
-                    .map_err(|e| format!("Failed to execute installation: {}", e))?;
+                    if output.status.success() {
+                        Ok(InstallResult {
+                            success: true,
+                            message: "Claude Code installed successfully".to_string(),
+                            output: String::from_utf8_lossy(&output.stdout).to_string(),
+                        })
+                    } else {
+                        Err(format!("Installation failed: {}", String::from_utf8_lossy(&output.stderr)))
+                    }
+                }
 
-                if output.status.success() {
-                    Ok(InstallResult {
-                        success: true,
-                        message: "Claude Code installed successfully".to_string(),
-                        output: String::from_utf8_lossy(&output.stdout).to_string(),
-                    })
-                } else {
-                    Err(format!("Installation failed: {}", String::from_utf8_lossy(&output.stderr)))
+                #[cfg(not(target_os = "windows"))]
+                {
+                    // macOS/Linux: curl -fsSL https://duckcoding.com/mirrors/claude-code/install.sh | bash
+                    let output = Command::new("sh")
+                        .env("PATH", get_extended_path())
+                        .args(&[
+                            "-c",
+                            "curl -fsSL https://duckcoding.com/mirrors/claude-code/install.sh | bash"
+                        ])
+                        .output()
+                        .map_err(|e| format!("Failed to execute installation: {}", e))?;
+
+                    if output.status.success() {
+                        Ok(InstallResult {
+                            success: true,
+                            message: "Claude Code installed successfully".to_string(),
+                            output: String::from_utf8_lossy(&output.stdout).to_string(),
+                        })
+                    } else {
+                        Err(format!("Installation failed: {}", String::from_utf8_lossy(&output.stderr)))
+                    }
                 }
             }
         },
@@ -580,27 +599,28 @@ async fn update_tool(tool: String) -> Result<UpdateResult, String> {
                     println!("Claude Code detected as npm installation, using npm update");
                     ("npm", vec!["update", "-g", "@anthropic-ai/claude-code"], "npm更新")
                 } else {
-                    // 使用官方安装脚本更新
-                    println!("Claude Code detected as native installation, using official script");
+                    // 使用DuckCoding镜像脚本更新
+                    println!("Claude Code detected as native installation, using DuckCoding mirror");
                     #[cfg(target_os = "windows")]
                     {
-                        ("powershell", vec!["-Command", "irm https://claude.ai/install.ps1 | iex"], "官方脚本更新")
+                        // Windows暂时还是用官方（或提示手动）
+                        ("powershell", vec!["-Command", "irm https://duckcoding.com/mirrors/claude-code/install.ps1 | iex"], "DuckCoding镜像更新")
                     }
                     #[cfg(not(target_os = "windows"))]
                     {
-                        ("sh", vec!["-c", "curl -fsSL https://claude.ai/install.sh | bash"], "官方脚本更新")
+                        ("sh", vec!["-c", "curl -fsSL https://duckcoding.com/mirrors/claude-code/install.sh | bash"], "DuckCoding镜像更新")
                     }
                 }
             } else {
-                // npm 命令失败，默认使用官方脚本
-                println!("npm check failed, defaulting to official script");
+                // npm 命令失败，默认使用DuckCoding镜像
+                println!("npm check failed, defaulting to DuckCoding mirror");
                 #[cfg(target_os = "windows")]
                 {
-                    ("powershell", vec!["-Command", "irm https://claude.ai/install.ps1 | iex"], "官方脚本更新")
+                    ("powershell", vec!["-Command", "irm https://duckcoding.com/mirrors/claude-code/install.ps1 | iex"], "DuckCoding镜像更新")
                 }
                 #[cfg(not(target_os = "windows"))]
                 {
-                    ("sh", vec!["-c", "curl -fsSL https://claude.ai/install.sh | bash"], "官方脚本更新")
+                    ("sh", vec!["-c", "curl -fsSL https://duckcoding.com/mirrors/claude-code/install.sh | bash"], "DuckCoding镜像更新")
                 }
             }
         },
