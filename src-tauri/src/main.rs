@@ -85,13 +85,29 @@ async fn check_installations() -> Result<Vec<ToolStatus>, String> {
         },
     ];
 
+    // 跨平台命令执行辅助函数
+    let run_command = |cmd: &str| -> Result<std::process::Output, std::io::Error> {
+        #[cfg(target_os = "windows")]
+        {
+            Command::new("cmd")
+                .env("PATH", get_extended_path())
+                .arg("/C")
+                .arg(cmd)
+                .output()
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Command::new("sh")
+                .env("PATH", get_extended_path())
+                .arg("-c")
+                .arg(cmd)
+                .output()
+        }
+    };
+
     // 检测 Claude Code
-    if let Ok(output) = Command::new("sh")
-        .env("PATH", get_extended_path())
-        .arg("-c")
-        .arg("claude --version 2>&1")
-        .output()
-    {
+    if let Ok(output) = run_command("claude --version 2>&1") {
         if output.status.success() {
             if let Some(tool) = tools.iter_mut().find(|t| t.id == "claude-code") {
                 tool.installed = true;
@@ -101,12 +117,7 @@ async fn check_installations() -> Result<Vec<ToolStatus>, String> {
     }
 
     // 检测 CodeX
-    if let Ok(output) = Command::new("sh")
-        .env("PATH", get_extended_path())
-        .arg("-c")
-        .arg("codex --version 2>&1")
-        .output()
-    {
+    if let Ok(output) = run_command("codex --version 2>&1") {
         if output.status.success() {
             if let Some(tool) = tools.iter_mut().find(|t| t.id == "codex") {
                 tool.installed = true;
@@ -116,12 +127,7 @@ async fn check_installations() -> Result<Vec<ToolStatus>, String> {
     }
 
     // 检测 Gemini CLI
-    if let Ok(output) = Command::new("sh")
-        .env("PATH", get_extended_path())
-        .arg("-c")
-        .arg("gemini --version 2>&1")
-        .output()
-    {
+    if let Ok(output) = run_command("gemini --version 2>&1") {
         if output.status.success() {
             if let Some(tool) = tools.iter_mut().find(|t| t.id == "gemini-cli") {
                 tool.installed = true;

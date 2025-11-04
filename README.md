@@ -33,9 +33,28 @@
 
 前往 [Releases 页面](https://github.com/DuckCoding-dev/DuckCoding/releases) 下载适合你系统的安装包：
 
-- **macOS**: `DuckCoding_1.0.0_universal.dmg` (支持 Intel 和 Apple Silicon M1/M2/M3/M4/M5)
-- **Windows**: `DuckCoding_1.0.0_x64-setup.exe` 或 `.msi`
-- **Linux**: `duckcoding_1.0.0_amd64.deb` (Debian/Ubuntu) 或 `.rpm` (Fedora/RHEL) 或 `.AppImage`
+### 桌面应用（推荐）
+
+- **macOS Universal**: `DuckCoding-macOS-Universal.dmg` (支持 Intel 和 Apple Silicon M1/M2/M3/M4/M5)
+- **Windows x64**: `DuckCoding-Windows-x64-setup.exe` 或 `DuckCoding-Windows-x64.msi`
+- **Linux x64**:
+  - Debian/Ubuntu: `DuckCoding-Linux-x64.deb`
+  - Fedora/RHEL: `DuckCoding-Linux-x64.rpm`
+  - 通用: `DuckCoding-Linux-x64.AppImage`
+
+### 平台支持说明
+
+✅ **完全支持**:
+- Windows 10/11 (x64) - 原生桌面应用
+- macOS 10.15+ (Intel x64 和 Apple Silicon ARM64) - 通用二进制
+- Linux (x64) - Debian/Ubuntu/Fedora/RHEL 及其他发行版
+
+❌ **不支持**:
+- **Windows WSL / Linux WSL**: WSL环境无法运行GUI桌面应用
+  - **解决方案**: WSL用户请使用Windows原生版本（.msi/.exe）或使用CLI模式
+
+📝 **CLI模式支持**:
+如果你只需要命令行功能（不需要GUI），可以直接运行 `node cli.js`，支持所有平台包括WSL。
 
 ## 🎯 使用方法
 
