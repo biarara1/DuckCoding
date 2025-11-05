@@ -267,14 +267,26 @@ async fn install_tool(tool: String, method: String) -> Result<InstallResult, Str
                     .args(&["install", "-g", "@anthropic-ai/claude-code"])
                     .creation_flags(0x08000000)  // CREATE_NO_WINDOW - 隐藏终端窗口
                     .output()
-                    .map_err(|e| format!("Failed to execute npm: {}", e))?;
+                    .map_err(|e| {
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            "npm 未安装或未找到\n\n请先安装 Node.js (包含 npm):\n1. 访问 https://nodejs.org 下载安装\n2. 或使用官方安装方式（无需 npm）".to_string()
+                        } else {
+                            format!("执行 npm 失败: {}", e)
+                        }
+                    })?;
 
                 #[cfg(not(target_os = "windows"))]
                 let output = Command::new("npm")
                     .env("PATH", get_extended_path())
                     .args(&["install", "-g", "@anthropic-ai/claude-code"])
                     .output()
-                    .map_err(|e| format!("Failed to execute npm: {}", e))?;
+                    .map_err(|e| {
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            "npm 未安装或未找到\n\n请先安装 Node.js (包含 npm):\n1. 访问 https://nodejs.org 下载安装\n2. 或使用官方安装方式（无需 npm）".to_string()
+                        } else {
+                            format!("执行 npm 失败: {}", e)
+                        }
+                    })?;
 
                 if output.status.success() {
                     Ok(InstallResult {
@@ -368,14 +380,26 @@ async fn install_tool(tool: String, method: String) -> Result<InstallResult, Str
                     .args(&["install", "-g", "@openai/codex"])
                     .creation_flags(0x08000000)  // CREATE_NO_WINDOW - 隐藏终端窗口
                     .output()
-                    .map_err(|e| format!("Failed to execute npm: {}", e))?;
+                    .map_err(|e| {
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            "npm 未安装或未找到\n\n请先安装 Node.js (包含 npm):\n访问 https://nodejs.org 下载安装".to_string()
+                        } else {
+                            format!("执行 npm 失败: {}", e)
+                        }
+                    })?;
 
                 #[cfg(not(target_os = "windows"))]
                 let output = Command::new("npm")
                     .env("PATH", get_extended_path())
                     .args(&["install", "-g", "@openai/codex"])
                     .output()
-                    .map_err(|e| format!("Failed to execute npm: {}", e))?;
+                    .map_err(|e| {
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            "npm 未安装或未找到\n\n请先安装 Node.js (包含 npm):\n访问 https://nodejs.org 下载安装".to_string()
+                        } else {
+                            format!("执行 npm 失败: {}", e)
+                        }
+                    })?;
 
                 if output.status.success() {
                     Ok(InstallResult {
@@ -396,14 +420,26 @@ async fn install_tool(tool: String, method: String) -> Result<InstallResult, Str
                 .args(&["install", "-g", "@google/gemini-cli"])
                 .creation_flags(0x08000000)  // CREATE_NO_WINDOW - 隐藏终端窗口
                 .output()
-                .map_err(|e| format!("Failed to execute npm: {}", e))?;
+                .map_err(|e| {
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        "npm 未安装或未找到\n\n请先安装 Node.js (包含 npm):\n访问 https://nodejs.org 下载安装".to_string()
+                    } else {
+                        format!("执行 npm 失败: {}", e)
+                    }
+                })?;
 
             #[cfg(not(target_os = "windows"))]
             let output = Command::new("npm")
                 .env("PATH", get_extended_path())
                 .args(&["install", "-g", "@google/gemini-cli"])
                 .output()
-                .map_err(|e| format!("Failed to execute npm: {}", e))?;
+                .map_err(|e| {
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        "npm 未安装或未找到\n\n请先安装 Node.js (包含 npm):\n访问 https://nodejs.org 下载安装".to_string()
+                    } else {
+                        format!("执行 npm 失败: {}", e)
+                    }
+                })?;
 
             if output.status.success() {
                 Ok(InstallResult {
