@@ -177,7 +177,7 @@ function App() {
   const [nodeEnv, setNodeEnv] = useState<NodeEnvironment | null>(null);
   const [installMethods, setInstallMethods] = useState<Record<string, string>>({
     "claude-code": "official",
-    "codex": "official",
+    "codex": navigator.userAgent.includes('Mac') ? "brew" : "npm",  // CodeX 默认：macOS 用 brew，其他用 npm
     "gemini-cli": "npm",
   });
 
@@ -327,12 +327,12 @@ function App() {
       ];
     } else if (toolId === "codex") {
       const methods = [
-        { value: "official", label: "官方安装 (推荐)" },
         { value: "npm", label: "npm 安装", disabled: !nodeEnv?.npm_available }
       ];
       if (isMac) {
-        methods.splice(1, 0, { value: "brew", label: "Homebrew" });
+        methods.unshift({ value: "brew", label: "Homebrew (推荐)" });
       }
+      // 注意：官方安装方法暂未实现，已移除
       return methods;
     } else if (toolId === "gemini-cli") {
       return [

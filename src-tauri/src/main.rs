@@ -1182,7 +1182,7 @@ fn create_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
 
 fn main() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .setup(|app| {
             // 设置工作目录到项目根目录（跨平台支持）
             if let Ok(resource_dir) = app.path().resource_dir() {
@@ -1357,9 +1357,8 @@ fn main() {
                         #[cfg(target_os = "macos")]
                         {
                             use cocoa::appkit::NSApplication;
-                            use cocoa::base::{id, nil};
+                            use cocoa::base::nil;
                             use cocoa::foundation::NSAutoreleasePool;
-                            use objc::runtime::BOOL;
 
                             unsafe {
                                 let _pool = NSAutoreleasePool::new(nil);
@@ -1398,7 +1397,7 @@ fn main() {
     builder.build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| match event {
-            tauri::RunEvent::Reopened => {
+            tauri::RunEvent::Reopen { .. } => {
                 // macOS: 从 Dock 或 Cmd+Tab 唤醒应用
                 #[cfg(target_os = "macos")]
                 {
