@@ -141,7 +141,7 @@ function App() {
   const [updateCheckMessage, setUpdateCheckMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [configuring, setConfiguring] = useState(false);
   const [switching, setSwitching] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [deletingProfiles, setDeletingProfiles] = useState<Record<string, boolean>>({});
 
   // Ref to store timeout ID for cleanup
   const updateMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -760,25 +760,49 @@ function App() {
       return;
     }
 
+    const profileKey = `${toolId}-${profile}`;
+
     try {
-      setDeleting(true);
+      setDeletingProfiles(prev => ({ ...prev, [profileKey]: true }));
       await deleteProfile(toolId, profile);
 
-      // 更新profiles列表，移除已删除的配置
-      setProfiles(prevProfiles => {
-        const updatedProfiles = { ...prevProfiles };
-        if (updatedProfiles[toolId]) {
-          updatedProfiles[toolId] = updatedProfiles[toolId].filter(p => p !== profile);
+      // 更新本地排序存档（移除已删除的 profile）
+      const currentProfiles = profiles[toolId] || [];
+      const updatedProfiles = currentProfiles.filter(p => p !== profile);
+      saveProfileOrder(toolId, updatedProfiles);
+
+      // 清理相关状态
+      setSelectedProfile(prev => {
+        const updated = { ...prev };
+        if (updated[toolId] === profile) {
+          delete updated[toolId];
         }
-        return updatedProfiles;
+        return updated;
       });
+
+      // 重新加载所有配置，确保 UI 与后端同步
+      await loadAllProfiles();
+
+      // 如果删除的是当前正在使用的配置，重新获取当前配置
+      if (activeConfigs[toolId]?.profile_name === profile) {
+        try {
+          const newActiveConfig = await getActiveConfig(toolId);
+          setActiveConfigs(prev => ({ ...prev, [toolId]: newActiveConfig }));
+        } catch (error) {
+          console.error("Failed to reload active config", error);
+        }
+      }
 
       alert("✅ 配置删除成功！");
     } catch (error) {
       console.error("Failed to delete profile:", error);
       alert("❌ 删除失败\n\n" + error);
     } finally {
-      setDeleting(false);
+      setDeletingProfiles(prev => {
+        const updated = { ...prev };
+        delete updated[profileKey];
+        return updated;
+      });
     }
   };
 
@@ -1275,7 +1299,9 @@ function App() {
                                     DuckCoding 默认配置
                                   </p>
                                   <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
-                                    <p>• Base URL: <code className="bg-white/50 dark:bg-slate-900/50 px-1.5 py-0.5 rounded">https://jp.duckcoding.com</code></p>
+                                    <p>• Base URL: <code className="bg-white/50 dark:bg-slate-900/50 px-1.5 py-0.5 rounded">
+                                      {selectedTool === "codex" ? "https://jp.duckcoding.com/v1" : "https://jp.duckcoding.com"}
+                                    </code></p>
                                     <p>• 无需手动填写 Base URL，将自动使用默认端点</p>
                                     <p>• 切换配置后，请<strong>重启相关 CLI</strong> 以使新配置生效</p>
                                   </div>
@@ -1441,7 +1467,7 @@ function App() {
                                             profile={profile}
                                             toolId={tool.id}
                                             switching={switching}
-                                            deleting={deleting}
+                                            deleting={deletingProfiles[`${tool.id}-${profile}`] || false}
                                             onSwitch={handleSwitchProfile}
                                             onDelete={handleDeleteProfile}
                                           />

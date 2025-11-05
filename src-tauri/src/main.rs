@@ -360,8 +360,13 @@ async fn configure_api(tool: String, _provider: String, api_key: String, base_ur
     let tool_obj = Tool::by_id(&tool)
         .ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
 
-    // 获取 base_url，使用默认值
-    let base_url_str = base_url.unwrap_or_else(|| "https://jp.duckcoding.com".to_string());
+    // 获取 base_url，根据工具类型使用不同的默认值
+    let base_url_str = base_url.unwrap_or_else(|| {
+        match tool.as_str() {
+            "codex" => "https://jp.duckcoding.com/v1".to_string(),
+            _ => "https://jp.duckcoding.com".to_string(),
+        }
+    });
 
     // 使用 ConfigService 应用配置
     ConfigService::apply_config(
