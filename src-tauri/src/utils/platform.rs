@@ -69,6 +69,7 @@ impl PlatformInfo {
         ];
 
         if let Ok(local_app_data) = env::var("LOCALAPPDATA") {
+            paths.push(format!("{}\\Programs\\claude-code", local_app_data));
             paths.push(format!("{}\\Programs\\claude\\bin", local_app_data));
         }
 

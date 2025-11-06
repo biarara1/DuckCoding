@@ -2,6 +2,9 @@ use std::process::{Command, Output};
 use std::io;
 use super::platform::PlatformInfo;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 /// 命令执行结果
 #[derive(Debug)]
 pub struct CommandResult {
@@ -48,10 +51,21 @@ impl CommandExecutor {
         let enhanced_path = self.platform.build_enhanced_path();
 
         let output = if self.platform.is_windows {
-            Command::new("cmd")
-                .args(&["/C", command_str])
-                .env("PATH", enhanced_path)
-                .output()
+            #[cfg(target_os = "windows")]
+            {
+                Command::new("cmd")
+                    .args(&["/C", command_str])
+                    .creation_flags(0x08000000)  // CREATE_NO_WINDOW
+                    .env("PATH", enhanced_path)
+                    .output()
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Command::new("cmd")
+                    .args(&["/C", command_str])
+                    .env("PATH", enhanced_path)
+                    .output()
+            }
         } else {
             Command::new("sh")
                 .args(&["-c", command_str])
