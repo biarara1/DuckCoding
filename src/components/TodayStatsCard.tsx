@@ -1,9 +1,9 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar } from "lucide-react";
-import { useMemo } from "react";
-import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
-import type { UsageStatsResult } from "@/lib/tauri-commands";
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Calendar } from 'lucide-react';
+import { useMemo } from 'react';
+import { format } from 'date-fns';
+import { zhCN } from 'date-fns/locale';
+import type { UsageStatsResult } from '@/lib/tauri-commands';
 
 interface TodayStatsCardProps {
   stats: UsageStatsResult | null;
@@ -23,12 +23,12 @@ export function TodayStatsCard({ stats, loading }: TodayStatsCardProps) {
     const todayStartTimestamp = Math.floor(todayStart.getTime() / 1000);
 
     // 过滤今日数据
-    const todayData = stats.data.filter(item => item.created_at >= todayStartTimestamp);
+    const todayData = stats.data.filter((item) => item.created_at >= todayStartTimestamp);
 
     // 聚合今日数据
     return {
       requests: todayData.reduce((sum, item) => sum + item.count, 0),
-      quota: todayData.reduce((sum, item) => sum + item.quota, 0) / 500000
+      quota: todayData.reduce((sum, item) => sum + item.quota, 0) / 500000,
     };
   }, [stats?.data]);
 
@@ -80,7 +80,7 @@ export function TodayStatsCard({ stats, loading }: TodayStatsCardProps) {
     );
   }
 
-  const today = format(new Date(), "yyyy年MM月dd日", { locale: zhCN });
+  const today = format(new Date(), 'yyyy年MM月dd日', { locale: zhCN });
 
   return (
     <Card className="shadow-sm border">

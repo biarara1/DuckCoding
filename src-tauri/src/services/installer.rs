@@ -1,7 +1,7 @@
-use crate::models::{Tool, InstallMethod};
+use crate::models::{InstallMethod, Tool};
 use crate::services::version::{VersionInfo, VersionService};
 use crate::utils::CommandExecutor;
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 
 /// 安装服务
 pub struct InstallerService {
@@ -32,7 +32,11 @@ impl InstallerService {
 
     /// 检查工具是否已安装
     pub async fn is_installed(&self, tool: &Tool) -> bool {
-        self.executor.command_exists_async(&tool.check_command.split_whitespace().next().unwrap()).await
+        if let Some(command) = tool.check_command.split_whitespace().next() {
+            self.executor.command_exists_async(command).await
+        } else {
+            false
+        }
     }
 
     /// 获取已安装版本
@@ -50,9 +54,7 @@ impl InstallerService {
     fn extract_version(output: &str) -> Option<String> {
         // 匹配版本号格式: v1.2.3 或 1.2.3
         let re = regex::Regex::new(r"v?(\d+\.\d+\.\d+(?:-[\w.]+)?)").ok()?;
-        re.captures(output)?
-            .get(1)
-            .map(|m| m.as_str().to_string())
+        re.captures(output)?.get(1).map(|m| m.as_str().to_string())
     }
 
     /// 检测工具的安装方法
@@ -61,7 +63,10 @@ impl InstallerService {
             "codex" => {
                 // 检查是否通过 Homebrew cask 安装
                 if self.executor.command_exists_async("brew").await {
-                    let result = self.executor.execute_async("brew list --cask codex 2>/dev/null").await;
+                    let result = self
+                        .executor
+                        .execute_async("brew list --cask codex 2>/dev/null")
+                        .await;
                     if result.success && result.stdout.contains("codex") {
                         return Some(InstallMethod::Brew);
                     }
@@ -69,7 +74,11 @@ impl InstallerService {
 
                 // 检查是否通过 npm 安装
                 if self.executor.command_exists_async("npm").await {
-                    let stderr_redirect = if cfg!(windows) { "2>nul" } else { "2>/dev/null" };
+                    let stderr_redirect = if cfg!(windows) {
+                        "2>nul"
+                    } else {
+                        "2>/dev/null"
+                    };
                     let cmd = format!("npm list -g @openai/codex {}", stderr_redirect);
                     let result = self.executor.execute_async(&cmd).await;
                     if result.success {
@@ -82,7 +91,11 @@ impl InstallerService {
             "claude-code" => {
                 // 检查是否通过 npm 安装
                 if self.executor.command_exists_async("npm").await {
-                    let stderr_redirect = if cfg!(windows) { "2>nul" } else { "2>/dev/null" };
+                    let stderr_redirect = if cfg!(windows) {
+                        "2>nul"
+                    } else {
+                        "2>/dev/null"
+                    };
                     let cmd = format!("npm list -g @anthropic-ai/claude-code {}", stderr_redirect);
                     let result = self.executor.execute_async(&cmd).await;
                     if result.success {
@@ -92,9 +105,7 @@ impl InstallerService {
 
                 Some(InstallMethod::Official)
             }
-            "gemini-cli" => {
-                Some(InstallMethod::Npm)
-            }
+            "gemini-cli" => Some(InstallMethod::Npm),
             _ => None,
         }
     }
@@ -118,19 +129,13 @@ impl InstallerService {
                     let mirror_ver = info.mirror_version.clone().unwrap_or_default();
                     let official_ver = info.latest_version.clone().unwrap_or_default();
 
-                    anyhow::bail!(
-                        "MIRROR_STALE|{}|{}",
-                        mirror_ver,
-                        official_ver
-                    );
+                    anyhow::bail!("MIRROR_STALE|{}|{}", mirror_ver, official_ver);
                 }
             }
         }
 
         // 针对 npm 安装，优先使用镜像/官方最新的具体版本号，避免 @latest 无法获取 preview 等版本
-        let npm_version_hint = version_info
-            .as_ref()
-            .and_then(Self::preferred_npm_version);
+        let npm_version_hint = version_info.as_ref().and_then(Self::preferred_npm_version);
 
         // 执行安装
         match method {
@@ -170,7 +175,8 @@ impl InstallerService {
                     }
                 } else {
                     // macOS/Linux: 使用 DuckCoding 镜像
-                    "curl -fsSL https://mirror.duckcoding.com/claude-code/install.sh | bash".to_string()
+                    "curl -fsSL https://mirror.duckcoding.com/claude-code/install.sh | bash"
+                        .to_string()
                 }
             }
             "codex" => {
@@ -221,7 +227,9 @@ impl InstallerService {
         }
 
         if !self.executor.command_exists_async("brew").await {
-            anyhow::bail!("❌ Homebrew 未安装\n\n请先安装 Homebrew:\n访问 https://brew.sh 查看安装方法");
+            anyhow::bail!(
+                "❌ Homebrew 未安装\n\n请先安装 Homebrew:\n访问 https://brew.sh 查看安装方法"
+            );
         }
 
         let command = match tool.id.as_str() {
@@ -240,7 +248,9 @@ impl InstallerService {
 
     /// 更新工具
     pub async fn update(&self, tool: &Tool, force: bool) -> Result<()> {
-        let method = self.detect_install_method(tool).await
+        let method = self
+            .detect_install_method(tool)
+            .await
             .context("无法检测安装方法")?;
 
         // 官方脚本 / npm 更新需要提前获取版本信息
@@ -260,23 +270,15 @@ impl InstallerService {
                     let mirror_ver = info.mirror_version.clone().unwrap_or_default();
                     let official_ver = info.latest_version.clone().unwrap_or_default();
 
-                    anyhow::bail!(
-                        "MIRROR_STALE|{}|{}",
-                        mirror_ver,
-                        official_ver
-                    );
+                    anyhow::bail!("MIRROR_STALE|{}|{}", mirror_ver, official_ver);
                 }
             }
         }
 
-        let npm_version_hint = version_info
-            .as_ref()
-            .and_then(Self::preferred_npm_version);
+        let npm_version_hint = version_info.as_ref().and_then(Self::preferred_npm_version);
 
         match method {
-            InstallMethod::Npm => {
-                self.install_npm(tool, npm_version_hint.as_deref()).await
-            }
+            InstallMethod::Npm => self.install_npm(tool, npm_version_hint.as_deref()).await,
             InstallMethod::Brew => {
                 let command = match tool.id.as_str() {
                     "codex" => "brew upgrade --cask codex",

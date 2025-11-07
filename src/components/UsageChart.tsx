@@ -1,10 +1,19 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3 } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
-import { useMemo } from "react";
-import type { UsageStatsResult } from "@/lib/tauri-commands";
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BarChart3 } from 'lucide-react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
+import { format } from 'date-fns';
+import { zhCN } from 'date-fns/locale';
+import { useMemo } from 'react';
+import type { UsageStatsResult } from '@/lib/tauri-commands';
 
 interface UsageChartProps {
   stats: UsageStatsResult | null;
@@ -12,6 +21,68 @@ interface UsageChartProps {
 }
 
 export function UsageChart({ stats, loading }: UsageChartProps) {
+  // 按日期聚合数据 - 使用 useMemo 缓存
+  const chartData = useMemo(() => {
+    if (!stats?.data || stats.data.length === 0) {
+      return [];
+    }
+
+    console.log('Aggregating usage data, total records:', stats.data.length);
+
+    const dateMap = new Map<
+      string,
+      {
+        date: string;
+        dateObj: Date;
+        tokens: number;
+        requests: number;
+        quota: number;
+        quotaRMB: number;
+      }
+    >();
+
+    stats.data.forEach((item) => {
+      const dateObj = new Date(item.created_at * 1000);
+      const date = format(dateObj, 'MM-dd', { locale: zhCN });
+
+      if (dateMap.has(date)) {
+        const existing = dateMap.get(date)!;
+        existing.tokens += item.token_used;
+        existing.requests += item.count;
+        existing.quota += item.quota;
+        existing.quotaRMB += item.quota / 500000;
+      } else {
+        dateMap.set(date, {
+          date,
+          dateObj,
+          tokens: item.token_used,
+          requests: item.count,
+          quota: item.quota,
+          quotaRMB: item.quota / 500000,
+        });
+      }
+    });
+
+    // 按实际日期对象排序，而不是字符串
+    const result = Array.from(dateMap.values()).sort(
+      (a, b) => a.dateObj.getTime() - b.dateObj.getTime(),
+    );
+
+    return result;
+  }, [stats]);
+
+  // 计算总计 - 使用 useMemo 缓存
+  const { totalQuota, totalRequests } = useMemo(() => {
+    if (!stats?.data || stats.data.length === 0) {
+      return { totalQuota: 0, totalRequests: 0 };
+    }
+
+    return {
+      totalQuota: stats.data.reduce((sum, item) => sum + item.quota, 0) / 500000,
+      totalRequests: stats.data.reduce((sum, item) => sum + item.count, 0),
+    };
+  }, [stats]);
+
   if (loading) {
     return (
       <Card className="shadow-sm border">
@@ -28,7 +99,9 @@ export function UsageChart({ stats, loading }: UsageChartProps) {
     );
   }
 
-  if (!stats || !stats.success || !stats.data || stats.data.length === 0) {
+  const hasData = stats?.success && stats.data && stats.data.length > 0;
+
+  if (!hasData) {
     return (
       <Card className="shadow-sm border">
         <CardHeader className="pb-3">
@@ -48,59 +121,6 @@ export function UsageChart({ stats, loading }: UsageChartProps) {
     );
   }
 
-  // 按日期聚合数据 - 使用 useMemo 缓存
-  const chartData = useMemo(() => {
-    if (!stats?.data || stats.data.length === 0) {
-      return [];
-    }
-
-    console.log("Aggregating usage data, total records:", stats.data.length);
-
-    const dateMap = new Map<string, { date: string; dateObj: Date; tokens: number; requests: number; quota: number; quotaRMB: number }>();
-
-    stats.data.forEach(item => {
-      const dateObj = new Date(item.created_at * 1000);
-      const date = format(dateObj, "MM-dd", { locale: zhCN });
-
-      if (dateMap.has(date)) {
-        const existing = dateMap.get(date)!;
-        existing.tokens += item.token_used;
-        existing.requests += item.count;
-        existing.quota += item.quota;
-        existing.quotaRMB += item.quota / 500000;
-      } else {
-        dateMap.set(date, {
-          date,
-          dateObj,
-          tokens: item.token_used,
-          requests: item.count,
-          quota: item.quota,
-          quotaRMB: item.quota / 500000
-        });
-      }
-    });
-
-    // 按实际日期对象排序，而不是字符串
-    const result = Array.from(dateMap.values()).sort((a, b) =>
-      a.dateObj.getTime() - b.dateObj.getTime()
-    );
-
-    console.log("Aggregated data points:", result.length);
-    return result;
-  }, [stats?.data]);
-
-  // 计算总计 - 使用 useMemo 缓存
-  const { totalQuota, totalRequests } = useMemo(() => {
-    if (!stats?.data || stats.data.length === 0) {
-      return { totalQuota: 0, totalRequests: 0 };
-    }
-
-    return {
-      totalQuota: stats.data.reduce((sum, item) => sum + item.quota, 0) / 500000,
-      totalRequests: stats.data.reduce((sum, item) => sum + item.count, 0)
-    };
-  }, [stats?.data]);
-
   const formatQuota = (value: number): string => {
     // 如果值很小，显示更多位数
     if (value < 0.01) {
@@ -117,21 +137,15 @@ export function UsageChart({ stats, loading }: UsageChartProps) {
       const data = payload[0].payload;
       return (
         <div className="bg-white dark:bg-slate-800 p-3 rounded border shadow-lg">
-          <p className="font-semibold text-sm mb-2">
-            {data.date}
-          </p>
+          <p className="font-semibold text-sm mb-2">{data.date}</p>
           <div className="space-y-1 text-xs">
             <p className="flex items-center justify-between gap-4">
               <span className="text-muted-foreground">请求次数:</span>
-              <span className="font-semibold text-blue-600">
-                {data.requests.toLocaleString()}
-              </span>
+              <span className="font-semibold text-blue-600">{data.requests.toLocaleString()}</span>
             </p>
             <p className="flex items-center justify-between gap-4">
               <span className="text-muted-foreground">消费额度:</span>
-              <span className="font-semibold text-green-600">
-                {formatQuota(data.quotaRMB)}
-              </span>
+              <span className="font-semibold text-green-600">{formatQuota(data.quotaRMB)}</span>
             </p>
           </div>
         </div>
@@ -155,7 +169,9 @@ export function UsageChart({ stats, loading }: UsageChartProps) {
             </div>
             <div className="flex items-center gap-1.5">
               <span>总请求:</span>
-              <span className="font-semibold text-foreground">{totalRequests.toLocaleString()}</span>
+              <span className="font-semibold text-foreground">
+                {totalRequests.toLocaleString()}
+              </span>
             </div>
           </div>
         </div>
@@ -190,10 +206,7 @@ export function UsageChart({ stats, loading }: UsageChartProps) {
               label={{ value: '额度', angle: 90, position: 'insideRight', style: { fontSize: 11 } }}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Legend
-              wrapperStyle={{ paddingTop: "16px", fontSize: "12px" }}
-              iconType="circle"
-            />
+            <Legend wrapperStyle={{ paddingTop: '16px', fontSize: '12px' }} iconType="circle" />
             <Line
               yAxisId="left"
               type="monotone"

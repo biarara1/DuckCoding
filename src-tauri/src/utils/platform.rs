@@ -58,7 +58,12 @@ impl PlatformInfo {
             self.unix_system_paths()
         };
 
-        format!("{}{}{}", system_paths.join(separator), separator, current_path)
+        format!(
+            "{}{}{}",
+            system_paths.join(separator),
+            separator,
+            current_path
+        )
     }
 
     /// Windows 系统路径

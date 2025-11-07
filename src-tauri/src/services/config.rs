@@ -1,6 +1,6 @@
 use crate::models::Tool;
-use anyhow::{Result, Context};
-use serde_json::{Value, Map};
+use anyhow::{Context, Result};
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::fs;
 /// 配置服务
@@ -35,10 +35,8 @@ impl ConfigService {
 
         // 读取现有配置
         let mut settings = if config_path.exists() {
-            let content = fs::read_to_string(&config_path)
-                .context("读取配置文件失败")?;
-            serde_json::from_str::<Value>(&content)
-                .unwrap_or(Value::Object(Map::new()))
+            let content = fs::read_to_string(&config_path).context("读取配置文件失败")?;
+            serde_json::from_str::<Value>(&content).unwrap_or(Value::Object(Map::new()))
         } else {
             Value::Object(Map::new())
         };
@@ -55,8 +53,14 @@ impl ConfigService {
 
         // 只更新 API 相关字段
         let env = obj.get_mut("env").unwrap().as_object_mut().unwrap();
-        env.insert(tool.env_vars.api_key.clone(), Value::String(api_key.to_string()));
-        env.insert(tool.env_vars.base_url.clone(), Value::String(base_url.to_string()));
+        env.insert(
+            tool.env_vars.api_key.clone(),
+            Value::String(api_key.to_string()),
+        );
+        env.insert(
+            tool.env_vars.base_url.clone(),
+            Value::String(base_url.to_string()),
+        );
 
         // 确保目录存在
         fs::create_dir_all(&tool.config_dir)?;
@@ -88,7 +92,8 @@ impl ConfigService {
         // 读取现有 config.toml（使用 toml_edit 保留注释）
         let mut doc = if config_path.exists() {
             let content = fs::read_to_string(&config_path)?;
-            content.parse::<toml_edit::DocumentMut>()
+            content
+                .parse::<toml_edit::DocumentMut>()
                 .unwrap_or_else(|_| toml_edit::DocumentMut::new())
         } else {
             toml_edit::DocumentMut::new()
@@ -96,7 +101,11 @@ impl ConfigService {
 
         // 判断 provider 类型
         let is_duckcoding = base_url.contains("duckcoding");
-        let provider_key = if is_duckcoding { "duckcoding" } else { "custom" };
+        let provider_key = if is_duckcoding {
+            "duckcoding"
+        } else {
+            "custom"
+        };
 
         // 只更新必要字段（保留用户自定义配置和注释）
         if !doc.contains_key("model") {
@@ -151,14 +160,16 @@ impl ConfigService {
         // 更新 auth.json（增量）
         let mut auth_data = if auth_path.exists() {
             let content = fs::read_to_string(&auth_path)?;
-            serde_json::from_str::<Value>(&content)
-                .unwrap_or(Value::Object(Map::new()))
+            serde_json::from_str::<Value>(&content).unwrap_or(Value::Object(Map::new()))
         } else {
             Value::Object(Map::new())
         };
 
         if let Value::Object(ref mut auth_obj) = auth_data {
-            auth_obj.insert("OPENAI_API_KEY".to_string(), Value::String(api_key.to_string()));
+            auth_obj.insert(
+                "OPENAI_API_KEY".to_string(),
+                Value::String(api_key.to_string()),
+            );
         }
 
         fs::write(&auth_path, serde_json::to_string_pretty(&auth_data)?)?;
@@ -218,8 +229,7 @@ impl ConfigService {
         // 读取并更新 settings.json
         let mut settings = if settings_path.exists() {
             let content = fs::read_to_string(&settings_path)?;
-            serde_json::from_str::<Value>(&content)
-                .unwrap_or(Value::Object(Map::new()))
+            serde_json::from_str::<Value>(&content).unwrap_or(Value::Object(Map::new()))
         } else {
             Value::Object(Map::new())
         };
@@ -229,9 +239,12 @@ impl ConfigService {
                 obj.insert("ide".to_string(), serde_json::json!({"enabled": true}));
             }
             if !obj.contains_key("security") {
-                obj.insert("security".to_string(), serde_json::json!({
-                    "auth": {"selectedType": "gemini-api-key"}
-                }));
+                obj.insert(
+                    "security".to_string(),
+                    serde_json::json!({
+                        "auth": {"selectedType": "gemini-api-key"}
+                    }),
+                );
             }
         }
 
@@ -273,10 +286,8 @@ impl ConfigService {
         }
 
         // 读取当前配置，只提取 API 相关字段
-        let content = fs::read_to_string(&config_path)
-            .context("读取配置文件失败")?;
-        let settings: Value = serde_json::from_str(&content)
-            .context("解析配置文件失败")?;
+        let content = fs::read_to_string(&config_path).context("读取配置文件失败")?;
+        let settings: Value = serde_json::from_str(&content).context("解析配置文件失败")?;
 
         // 只保存 API 相关字段
         let backup_data = serde_json::json!({
@@ -302,7 +313,9 @@ impl ConfigService {
         let config_path = tool.config_dir.join("config.toml");
         let auth_path = tool.config_dir.join("auth.json");
 
-        let backup_config = tool.config_dir.join(format!("config.{}.toml", profile_name));
+        let backup_config = tool
+            .config_dir
+            .join(format!("config.{}.toml", profile_name));
         let backup_auth = tool.config_dir.join(format!("auth.{}.json", profile_name));
 
         // 读取 auth.json 中的 API Key
@@ -321,7 +334,10 @@ impl ConfigService {
         let backup_auth_data = serde_json::json!({
             "OPENAI_API_KEY": api_key
         });
-        fs::write(&backup_auth, serde_json::to_string_pretty(&backup_auth_data)?)?;
+        fs::write(
+            &backup_auth,
+            serde_json::to_string_pretty(&backup_auth_data)?,
+        )?;
 
         // 对于 config.toml，只保存 base_url（使用简单的 TOML）
         if config_path.exists() {
@@ -338,7 +354,8 @@ impl ConfigService {
                             if let Some(url) = provider_table.get("base_url") {
                                 let mut backup_provider = toml_edit::Table::new();
                                 backup_provider.insert("base_url", url.clone());
-                                backup_providers.insert(key, toml_edit::Item::Table(backup_provider));
+                                backup_providers
+                                    .insert(key, toml_edit::Item::Table(backup_provider));
                             }
                         }
                     }
@@ -409,8 +426,7 @@ impl ConfigService {
         let mut profiles = Vec::new();
 
         // 时间戳格式正则: YYYYMMDD-HHMMSS
-        let timestamp_pattern = regex::Regex::new(r"^\d{8}-\d{6}$")
-            .unwrap();
+        let timestamp_pattern = regex::Regex::new(r"^\d{8}-\d{6}$").unwrap();
 
         for entry in entries {
             let entry = entry?;
@@ -430,7 +446,10 @@ impl ConfigService {
                             .trim_end_matches(".json")
                             .to_string();
 
-                        if !profile.is_empty() && !profile.starts_with('.') && !timestamp_pattern.is_match(&profile) {
+                        if !profile.is_empty()
+                            && !profile.starts_with('.')
+                            && !timestamp_pattern.is_match(&profile)
+                        {
                             profiles.push(profile);
                         }
                     }
@@ -441,7 +460,9 @@ impl ConfigService {
                         continue;
                     }
 
-                    let profile = if filename_str.starts_with("config.") && filename_str.ends_with(".toml") {
+                    let profile = if filename_str.starts_with("config.")
+                        && filename_str.ends_with(".toml")
+                    {
                         Some(
                             filename_str
                                 .trim_start_matches("config.")
@@ -460,7 +481,10 @@ impl ConfigService {
                     };
 
                     if let Some(profile) = profile {
-                        if !profile.is_empty() && !profile.starts_with('.') && !timestamp_pattern.is_match(&profile) {
+                        if !profile.is_empty()
+                            && !profile.starts_with('.')
+                            && !timestamp_pattern.is_match(&profile)
+                        {
                             profiles.push(profile);
                         }
                     }
@@ -472,11 +496,12 @@ impl ConfigService {
                     }
 
                     if filename_str.starts_with(".env.") {
-                        let profile = filename_str
-                            .trim_start_matches(".env.")
-                            .to_string();
+                        let profile = filename_str.trim_start_matches(".env.").to_string();
 
-                        if !profile.is_empty() && !profile.starts_with('.') && !timestamp_pattern.is_match(&profile) {
+                        if !profile.is_empty()
+                            && !profile.starts_with('.')
+                            && !timestamp_pattern.is_match(&profile)
+                        {
                             profiles.push(profile);
                         }
                     }
@@ -510,36 +535,41 @@ impl ConfigService {
         }
 
         // 读取备份的 API 字段（兼容新旧格式）
-        let backup_content = fs::read_to_string(&backup_path)
-            .context("读取备份配置失败")?;
-        let backup_data: Value = serde_json::from_str(&backup_content)
-            .context("解析备份配置失败")?;
+        let backup_content = fs::read_to_string(&backup_path).context("读取备份配置失败")?;
+        let backup_data: Value =
+            serde_json::from_str(&backup_content).context("解析备份配置失败")?;
 
         // 兼容旧格式：先尝试顶层字段（新格式），再尝试 env 下（旧格式）
-        let api_key = backup_data.get("ANTHROPIC_AUTH_TOKEN")
+        let api_key = backup_data
+            .get("ANTHROPIC_AUTH_TOKEN")
             .and_then(|v| v.as_str())
             .or_else(|| {
-                backup_data.get("env")
+                backup_data
+                    .get("env")
                     .and_then(|env| env.get("ANTHROPIC_AUTH_TOKEN"))
                     .and_then(|v| v.as_str())
             })
-            .ok_or_else(|| anyhow::anyhow!("备份配置格式错误：缺少 API Key\n\n请重新保存配置以更新格式"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("备份配置格式错误：缺少 API Key\n\n请重新保存配置以更新格式")
+            })?;
 
-        let base_url = backup_data.get("ANTHROPIC_BASE_URL")
+        let base_url = backup_data
+            .get("ANTHROPIC_BASE_URL")
             .and_then(|v| v.as_str())
             .or_else(|| {
-                backup_data.get("env")
+                backup_data
+                    .get("env")
                     .and_then(|env| env.get("ANTHROPIC_BASE_URL"))
                     .and_then(|v| v.as_str())
             })
-            .ok_or_else(|| anyhow::anyhow!("备份配置格式错误：缺少 Base URL\n\n请重新保存配置以更新格式"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("备份配置格式错误：缺少 Base URL\n\n请重新保存配置以更新格式")
+            })?;
 
         // 读取当前配置（保留其他字段）
         let mut settings = if active_path.exists() {
-            let content = fs::read_to_string(&active_path)
-                .context("读取当前配置失败")?;
-            serde_json::from_str::<Value>(&content)
-                .unwrap_or(Value::Object(Map::new()))
+            let content = fs::read_to_string(&active_path).context("读取当前配置失败")?;
+            serde_json::from_str::<Value>(&content).unwrap_or(Value::Object(Map::new()))
         } else {
             Value::Object(Map::new())
         };
@@ -555,8 +585,14 @@ impl ConfigService {
         }
 
         let env = obj.get_mut("env").unwrap().as_object_mut().unwrap();
-        env.insert("ANTHROPIC_AUTH_TOKEN".to_string(), Value::String(api_key.to_string()));
-        env.insert("ANTHROPIC_BASE_URL".to_string(), Value::String(base_url.to_string()));
+        env.insert(
+            "ANTHROPIC_AUTH_TOKEN".to_string(),
+            Value::String(api_key.to_string()),
+        );
+        env.insert(
+            "ANTHROPIC_BASE_URL".to_string(),
+            Value::String(base_url.to_string()),
+        );
 
         // 写回配置（保留其他字段）
         fs::write(&active_path, serde_json::to_string_pretty(&settings)?)?;
@@ -565,7 +601,9 @@ impl ConfigService {
     }
 
     fn activate_codex(tool: &Tool, profile_name: &str) -> Result<()> {
-        let backup_config = tool.config_dir.join(format!("config.{}.toml", profile_name));
+        let backup_config = tool
+            .config_dir
+            .join(format!("config.{}.toml", profile_name));
         let backup_auth = tool.config_dir.join(format!("auth.{}.json", profile_name));
 
         let active_config = tool.config_dir.join("config.toml");
@@ -578,21 +616,24 @@ impl ConfigService {
         // 读取备份的 API Key
         let backup_auth_content = fs::read_to_string(&backup_auth)?;
         let backup_auth_data: Value = serde_json::from_str(&backup_auth_content)?;
-        let api_key = backup_auth_data.get("OPENAI_API_KEY")
+        let api_key = backup_auth_data
+            .get("OPENAI_API_KEY")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("备份配置中缺少 API Key"))?;
 
         // 增量更新 auth.json（保留其他字段）
         let mut auth_data = if active_auth.exists() {
             let content = fs::read_to_string(&active_auth)?;
-            serde_json::from_str::<Value>(&content)
-                .unwrap_or(Value::Object(Map::new()))
+            serde_json::from_str::<Value>(&content).unwrap_or(Value::Object(Map::new()))
         } else {
             Value::Object(Map::new())
         };
 
         if let Value::Object(ref mut auth_obj) = auth_data {
-            auth_obj.insert("OPENAI_API_KEY".to_string(), Value::String(api_key.to_string()));
+            auth_obj.insert(
+                "OPENAI_API_KEY".to_string(),
+                Value::String(api_key.to_string()),
+            );
         }
 
         fs::write(&active_auth, serde_json::to_string_pretty(&auth_data)?)?;
@@ -605,14 +646,17 @@ impl ConfigService {
             // 读取当前 config.toml（保留其他配置）
             let mut active_doc = if active_config.exists() {
                 let content = fs::read_to_string(&active_config)?;
-                content.parse::<toml_edit::DocumentMut>()
+                content
+                    .parse::<toml_edit::DocumentMut>()
                     .unwrap_or_else(|_| toml_edit::DocumentMut::new())
             } else {
                 toml_edit::DocumentMut::new()
             };
 
             // 只更新 model_providers 中的 base_url（保留其他字段）
-            if let Some(backup_providers) = backup_doc.get("model_providers").and_then(|p| p.as_table()) {
+            if let Some(backup_providers) =
+                backup_doc.get("model_providers").and_then(|p| p.as_table())
+            {
                 if !active_doc.contains_key("model_providers") {
                     active_doc["model_providers"] = toml_edit::table();
                 }
@@ -626,7 +670,9 @@ impl ConfigService {
                             }
 
                             // 只更新 base_url
-                            if let Some(active_provider) = active_doc["model_providers"][key].as_table_mut() {
+                            if let Some(active_provider) =
+                                active_doc["model_providers"][key].as_table_mut()
+                            {
                                 active_provider.insert("base_url", base_url.clone());
                             }
                         }
@@ -715,7 +761,9 @@ impl ConfigService {
                 }
             }
             "codex" => {
-                let backup_config = tool.config_dir.join(format!("config.{}.toml", profile_name));
+                let backup_config = tool
+                    .config_dir
+                    .join(format!("config.{}.toml", profile_name));
                 let backup_auth = tool.config_dir.join(format!("auth.{}.json", profile_name));
 
                 if backup_config.exists() {
@@ -738,5 +786,4 @@ impl ConfigService {
 
         Ok(())
     }
-
 }

@@ -45,11 +45,13 @@
 ### 平台支持说明
 
 ✅ **完全支持**:
+
 - Windows 10/11 (x64) - 原生桌面应用
 - macOS 10.15+ (Intel x64 和 Apple Silicon ARM64) - 通用二进制
 - Linux (x64) - Debian/Ubuntu/Fedora/RHEL 及其他发行版
 
 ❌ **不支持**:
+
 - **Windows WSL / Linux WSL**: WSL环境无法运行GUI桌面应用
   - **解决方案**: WSL用户请使用Windows原生版本（.msi/.exe）
 
@@ -61,6 +63,7 @@
 ### 1. 安装工具
 
 在「安装工具」标签页选择需要安装的 AI 编程工具：
+
 - **Claude Code** - Anthropic 官方 AI 编程助手
 - **CodeX** - OpenAI 官方代码生成工具
 - **Gemini CLI** - Google Gemini 命令行工具
@@ -97,6 +100,7 @@
 ### 4. 查看用量
 
 在「控制台」标签页：
+
 - **余额显示** - 查看账户总额度、已用额度、剩余额度
 - **用量图表** - 查看最近30天的用量趋势
 - **请求统计** - 查看总请求次数
@@ -104,6 +108,7 @@
 ### 5. 切换配置
 
 在「切换配置」标签页：
+
 - 查看所有已保存的配置
 - 一键切换到不同的配置文件
 
@@ -113,11 +118,11 @@
 
 DuckCoding 要求每个工具使用对应的专用分组令牌：
 
-| 工具 | 必须选择的分组 |
-|------|--------------|
+| 工具        | 必须选择的分组           |
+| ----------- | ------------------------ |
 | Claude Code | **Claude Code 专用分组** |
-| CodeX | **CodeX 专用分组** |
-| Gemini CLI | **Gemini CLI 专用分组** |
+| CodeX       | **CodeX 专用分组**       |
+| Gemini CLI  | **Gemini CLI 专用分组**  |
 
 ❌ **不能混用**：不同工具的专用分组令牌不能互相使用
 
@@ -135,6 +140,7 @@ DuckCoding 要求每个工具使用对应的专用分组令牌：
 ## 🛠️ 技术栈
 
 ### 桌面应用
+
 - **前端**: React 18 + TypeScript + Tailwind CSS
 - **桌面框架**: Tauri 2.0
 - **后端**: Rust（完整服务层架构）
@@ -147,6 +153,7 @@ DuckCoding 要求每个工具使用对应的专用分组令牌：
 - **构建工具**: Vite
 
 ### Rust CLI (可选)
+
 - **CLI 框架**: clap + inquire
 - **共享服务层**: 与桌面应用相同的 Rust 服务层
 - **编译**: `cargo build --features cli --bin duckcoding`
@@ -156,16 +163,19 @@ DuckCoding 要求每个工具使用对应的专用分组令牌：
 应用会在以下位置创建配置文件：
 
 ### Claude Code
+
 - **位置**: `~/.claude/settings.json`
 - **格式**: JSON
 - 只更新 API 相关字段，保留其他自定义配置
 
 ### CodeX
+
 - **位置**: `~/.codex/config.toml` + `~/.codex/auth.json`
 - **格式**: TOML + JSON
 - 保存模型提供商配置和认证信息
 
 ### Gemini CLI
+
 - **位置**: `~/.gemini/.env`（主要配置）+ `~/.gemini/settings.json`（认证设置）
 - **格式**: ENV + JSON
 - 主要配置在 `.env` 文件，`settings.json` 仅用于指定认证类型

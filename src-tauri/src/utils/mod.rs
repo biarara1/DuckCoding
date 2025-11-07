@@ -1,5 +1,5 @@
-pub mod platform;
 pub mod command;
+pub mod platform;
 
-pub use platform::*;
 pub use command::*;
+pub use platform::*;

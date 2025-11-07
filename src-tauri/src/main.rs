@@ -1,23 +1,20 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, Runtime, AppHandle,
-};
-use std::process::Command;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use serde_json::Value;
-use serde::{Deserialize, Serialize};
+use std::process::Command;
+use tauri::{
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager, Runtime,
+};
 
 // 导入服务层
-use duckcoding::{
-    Tool, InstallerService, VersionService, ConfigService,
-    InstallMethod,
-};
+use duckcoding::{ConfigService, InstallMethod, InstallerService, Tool, VersionService};
 
 // Windows特定：隐藏命令行窗口
 #[cfg(target_os = "windows")]
@@ -27,19 +24,24 @@ use std::os::windows::process::CommandExt;
 fn get_extended_path() -> String {
     #[cfg(target_os = "windows")]
     {
-        let user_profile = env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".to_string());
+        let user_profile =
+            env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".to_string());
 
         let mut system_paths = vec![
             // Claude Code 可能的安装路径
             format!("{}\\AppData\\Local\\Programs\\claude-code", user_profile),
             format!("{}\\AppData\\Roaming\\npm", user_profile),
-            format!("{}\\AppData\\Local\\Programs\\Python\\Python312", user_profile),
-            format!("{}\\AppData\\Local\\Programs\\Python\\Python312\\Scripts", user_profile),
-
+            format!(
+                "{}\\AppData\\Local\\Programs\\Python\\Python312",
+                user_profile
+            ),
+            format!(
+                "{}\\AppData\\Local\\Programs\\Python\\Python312\\Scripts",
+                user_profile
+            ),
             // 常见安装路径
             "C:\\Program Files\\nodejs".to_string(),
             "C:\\Program Files\\Git\\cmd".to_string(),
-
             // 系统路径
             "C:\\Windows\\System32".to_string(),
             "C:\\Windows".to_string(),
@@ -62,12 +64,10 @@ fn get_extended_path() -> String {
             // Claude Code 可能的安装路径
             format!("{}/.local/bin", home_dir),
             format!("{}/.claude/bin", home_dir),
-            format!("{}/.claude/local", home_dir),  // Claude Code local安装
-
+            format!("{}/.claude/local", home_dir), // Claude Code local安装
             // Homebrew
             "/opt/homebrew/bin".to_string(),
             "/usr/local/bin".to_string(),
-
             // 系统路径
             "/usr/bin".to_string(),
             "/bin".to_string(),
@@ -96,7 +96,11 @@ fn get_extended_path() -> String {
             }
         }
 
-        format!("{}:{}", system_paths.join(":"), env::var("PATH").unwrap_or_default())
+        format!(
+            "{}:{}",
+            system_paths.join(":"),
+            env::var("PATH").unwrap_or_default()
+        )
     }
 }
 
@@ -135,7 +139,7 @@ async fn check_node_environment() -> Result<NodeEnvironment, String> {
                 .env("PATH", get_extended_path())
                 .arg("/C")
                 .arg(cmd)
-                .creation_flags(0x08000000)  // CREATE_NO_WINDOW - 隐藏终端窗口
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW - 隐藏终端窗口
                 .output()
         }
         #[cfg(not(target_os = "windows"))]
@@ -181,14 +185,21 @@ async fn check_node_environment() -> Result<NodeEnvironment, String> {
 }
 
 #[tauri::command]
-async fn install_tool(tool: String, method: String, force: Option<bool>) -> Result<InstallResult, String> {
+async fn install_tool(
+    tool: String,
+    method: String,
+    force: Option<bool>,
+) -> Result<InstallResult, String> {
     let force = force.unwrap_or(false);
     #[cfg(debug_assertions)]
-    println!("Installing {} via {} (using InstallerService, force={})", tool, method, force);
+    println!(
+        "Installing {} via {} (using InstallerService, force={})",
+        tool, method, force
+    );
 
     // 获取工具定义
-    let tool_obj = Tool::by_id(&tool)
-        .ok_or_else(|| "❌ 未知的工具\n\n请联系开发者报告此问题".to_string())?;
+    let tool_obj =
+        Tool::by_id(&tool).ok_or_else(|| "❌ 未知的工具\n\n请联系开发者报告此问题".to_string())?;
 
     // 转换安装方法
     let install_method = match method.as_str() {
@@ -230,24 +241,21 @@ async fn check_update(tool: String) -> Result<UpdateResult, String> {
     #[cfg(debug_assertions)]
     println!("Checking updates for {} (using VersionService)", tool);
 
-    let tool_obj = Tool::by_id(&tool)
-        .ok_or_else(|| format!("未知工具: {}", tool))?;
+    let tool_obj = Tool::by_id(&tool).ok_or_else(|| format!("未知工具: {}", tool))?;
 
     let version_service = VersionService::new();
 
     match version_service.check_version(&tool_obj).await {
-        Ok(version_info) => {
-            Ok(UpdateResult {
-                success: true,
-                message: "检查完成".to_string(),
-                has_update: version_info.has_update,
-                current_version: version_info.installed_version,
-                latest_version: version_info.latest_version,
-                mirror_version: version_info.mirror_version,
-                mirror_is_stale: Some(version_info.mirror_is_stale),
-                tool_id: Some(tool.clone()),
-            })
-        }
+        Ok(version_info) => Ok(UpdateResult {
+            success: true,
+            message: "检查完成".to_string(),
+            has_update: version_info.has_update,
+            current_version: version_info.installed_version,
+            latest_version: version_info.latest_version,
+            mirror_version: version_info.mirror_version,
+            mirror_is_stale: Some(version_info.mirror_is_stale),
+            tool_id: Some(tool.clone()),
+        }),
         Err(e) => {
             // 降级：如果检查失败，返回无法检查但不报错
             Ok(UpdateResult {
@@ -273,8 +281,9 @@ async fn check_all_updates() -> Result<Vec<UpdateResult>, String> {
     let version_service = VersionService::new();
     let version_infos = version_service.check_all_tools().await;
 
-    let results = version_infos.into_iter().map(|info| {
-        UpdateResult {
+    let results = version_infos
+        .into_iter()
+        .map(|info| UpdateResult {
             success: true,
             message: "检查完成".to_string(),
             has_update: info.has_update,
@@ -283,8 +292,8 @@ async fn check_all_updates() -> Result<Vec<UpdateResult>, String> {
             mirror_version: info.mirror_version,
             mirror_is_stale: Some(info.mirror_is_stale),
             tool_id: Some(info.tool_id),
-        }
-    }).collect();
+        })
+        .collect();
 
     Ok(results)
 }
@@ -293,11 +302,14 @@ async fn check_all_updates() -> Result<Vec<UpdateResult>, String> {
 async fn update_tool(tool: String, force: Option<bool>) -> Result<UpdateResult, String> {
     let force = force.unwrap_or(false);
     #[cfg(debug_assertions)]
-    println!("Updating {} (using InstallerService, force={})", tool, force);
+    println!(
+        "Updating {} (using InstallerService, force={})",
+        tool, force
+    );
 
     // 获取工具定义
-    let tool_obj = Tool::by_id(&tool)
-        .ok_or_else(|| "❌ 未知的工具\n\n请联系开发者报告此问题".to_string())?;
+    let tool_obj =
+        Tool::by_id(&tool).ok_or_else(|| "❌ 未知的工具\n\n请联系开发者报告此问题".to_string())?;
 
     // 使用 InstallerService 更新（内部有120秒超时）
     let installer = InstallerService::new();
@@ -305,10 +317,7 @@ async fn update_tool(tool: String, force: Option<bool>) -> Result<UpdateResult, 
     // 执行更新，添加超时控制
     use tokio::time::{timeout, Duration};
 
-    let update_result = timeout(
-        Duration::from_secs(120),
-        installer.update(&tool_obj, force)
-    ).await;
+    let update_result = timeout(Duration::from_secs(120), installer.update(&tool_obj, force)).await;
 
     match update_result {
         Ok(Ok(_)) => {
@@ -340,7 +349,7 @@ async fn update_tool(tool: String, force: Option<bool>) -> Result<UpdateResult, 
             // 检查npm是否显示已经是最新版本
             if error_str.contains("up to date") {
                 return Err(
-                    "ℹ️ 已是最新版本\n\n当前安装的版本已经是最新版本，无需更新。".to_string()
+                    "ℹ️ 已是最新版本\n\n当前安装的版本已经是最新版本，无需更新。".to_string(),
                 );
             }
 
@@ -362,29 +371,28 @@ async fn update_tool(tool: String, force: Option<bool>) -> Result<UpdateResult, 
 }
 
 #[tauri::command]
-async fn configure_api(tool: String, _provider: String, api_key: String, base_url: Option<String>, profile_name: Option<String>) -> Result<(), String> {
+async fn configure_api(
+    tool: String,
+    _provider: String,
+    api_key: String,
+    base_url: Option<String>,
+    profile_name: Option<String>,
+) -> Result<(), String> {
     #[cfg(debug_assertions)]
     println!("Configuring {} (using ConfigService)", tool);
 
     // 获取工具定义
-    let tool_obj = Tool::by_id(&tool)
-        .ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
+    let tool_obj = Tool::by_id(&tool).ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
 
     // 获取 base_url，根据工具类型使用不同的默认值
-    let base_url_str = base_url.unwrap_or_else(|| {
-        match tool.as_str() {
-            "codex" => "https://jp.duckcoding.com/v1".to_string(),
-            _ => "https://jp.duckcoding.com".to_string(),
-        }
+    let base_url_str = base_url.unwrap_or_else(|| match tool.as_str() {
+        "codex" => "https://jp.duckcoding.com/v1".to_string(),
+        _ => "https://jp.duckcoding.com".to_string(),
     });
 
     // 使用 ConfigService 应用配置
-    ConfigService::apply_config(
-        &tool_obj,
-        &api_key,
-        &base_url_str,
-        profile_name.as_deref(),
-    ).map_err(|e| e.to_string())?;
+    ConfigService::apply_config(&tool_obj, &api_key, &base_url_str, profile_name.as_deref())
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -395,26 +403,25 @@ async fn list_profiles(tool: String) -> Result<Vec<String>, String> {
     println!("Listing profiles for {} (using ConfigService)", tool);
 
     // 获取工具定义
-    let tool_obj = Tool::by_id(&tool)
-        .ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
+    let tool_obj = Tool::by_id(&tool).ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
 
     // 使用 ConfigService 列出配置
-    ConfigService::list_profiles(&tool_obj)
-        .map_err(|e| e.to_string())
+    ConfigService::list_profiles(&tool_obj).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn switch_profile(tool: String, profile: String) -> Result<(), String> {
     #[cfg(debug_assertions)]
-    println!("Switching profile for {} to {} (using ConfigService)", tool, profile);
+    println!(
+        "Switching profile for {} to {} (using ConfigService)",
+        tool, profile
+    );
 
     // 获取工具定义
-    let tool_obj = Tool::by_id(&tool)
-        .ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
+    let tool_obj = Tool::by_id(&tool).ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
 
     // 使用 ConfigService 激活配置
-    ConfigService::activate_profile(&tool_obj, &profile)
-        .map_err(|e| e.to_string())?;
+    ConfigService::activate_profile(&tool_obj, &profile).map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -425,12 +432,10 @@ async fn delete_profile(tool: String, profile: String) -> Result<(), String> {
     println!("Deleting profile: tool={}, profile={}", tool, profile);
 
     // 获取工具定义
-    let tool_obj = Tool::by_id(&tool)
-        .ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
+    let tool_obj = Tool::by_id(&tool).ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
 
     // 使用 ConfigService 删除配置
-    ConfigService::delete_profile(&tool_obj, &profile)
-        .map_err(|e| e.to_string())?;
+    ConfigService::delete_profile(&tool_obj, &profile).map_err(|e| e.to_string())?;
 
     #[cfg(debug_assertions)]
     println!("Successfully deleted profile: {}", profile);
@@ -469,16 +474,16 @@ struct UpdateResult {
     has_update: bool,
     current_version: Option<String>,
     latest_version: Option<String>,
-    mirror_version: Option<String>,     // 镜像实际可安装的版本
-    mirror_is_stale: Option<bool>,      // 镜像是否滞后
-    tool_id: Option<String>,  // 新增：工具ID，用于批量检查时识别工具
+    mirror_version: Option<String>, // 镜像实际可安装的版本
+    mirror_is_stale: Option<bool>,  // 镜像是否滞后
+    tool_id: Option<String>,        // 新增：工具ID，用于批量检查时识别工具
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct ActiveConfig {
     api_key: String,
     base_url: String,
-    profile_name: Option<String>,  // 当前配置的名称
+    profile_name: Option<String>, // 当前配置的名称
 }
 
 // 全局配置结构
@@ -583,7 +588,10 @@ fn get_global_config_path() -> Result<PathBuf, String> {
 async fn save_global_config(user_id: String, system_token: String) -> Result<(), String> {
     println!("save_global_config called with user_id: {}", user_id);
 
-    let config = GlobalConfig { user_id, system_token };
+    let config = GlobalConfig {
+        user_id,
+        system_token,
+    };
     let config_path = get_global_config_path()?;
 
     println!("Config path: {:?}", config_path);
@@ -591,8 +599,7 @@ async fn save_global_config(user_id: String, system_token: String) -> Result<(),
     let json = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-    fs::write(&config_path, json)
-        .map_err(|e| format!("Failed to write config: {}", e))?;
+    fs::write(&config_path, json).map_err(|e| format!("Failed to write config: {}", e))?;
 
     println!("Config saved successfully");
 
@@ -603,7 +610,7 @@ async fn save_global_config(user_id: String, system_token: String) -> Result<(),
         let metadata = fs::metadata(&config_path)
             .map_err(|e| format!("Failed to get file metadata: {}", e))?;
         let mut perms = metadata.permissions();
-        perms.set_mode(0o600);  // -rw-------
+        perms.set_mode(0o600); // -rw-------
         fs::set_permissions(&config_path, perms)
             .map_err(|e| format!("Failed to set file permissions: {}", e))?;
     }
@@ -620,11 +627,11 @@ async fn get_global_config() -> Result<Option<GlobalConfig>, String> {
         return Ok(None);
     }
 
-    let content = fs::read_to_string(&config_path)
-        .map_err(|e| format!("Failed to read config: {}", e))?;
+    let content =
+        fs::read_to_string(&config_path).map_err(|e| format!("Failed to read config: {}", e))?;
 
-    let config: GlobalConfig = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse config: {}", e))?;
+    let config: GlobalConfig =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
 
     Ok(Some(config))
 }
@@ -633,7 +640,8 @@ async fn get_global_config() -> Result<Option<GlobalConfig>, String> {
 #[tauri::command]
 async fn generate_api_key_for_tool(tool: String) -> Result<GenerateApiKeyResult, String> {
     // 读取全局配置
-    let global_config = get_global_config().await?
+    let global_config = get_global_config()
+        .await?
         .ok_or("请先配置用户ID和系统访问令牌")?;
 
     // 根据工具名称获取配置
@@ -661,7 +669,10 @@ async fn generate_api_key_for_tool(tool: String) -> Result<GenerateApiKeyResult,
 
     let create_response = client
         .post(create_url)
-        .header("Authorization", format!("Bearer {}", global_config.system_token))
+        .header(
+            "Authorization",
+            format!("Bearer {}", global_config.system_token),
+        )
         .header("New-Api-User", &global_config.user_id)
         .header("Content-Type", "application/json")
         .json(&create_body)
@@ -683,12 +694,17 @@ async fn generate_api_key_for_tool(tool: String) -> Result<GenerateApiKeyResult,
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     // 搜索刚创建的token
-    let search_url = format!("https://duckcoding.com/api/token/search?keyword={}",
-        urlencoding::encode(name));
+    let search_url = format!(
+        "https://duckcoding.com/api/token/search?keyword={}",
+        urlencoding::encode(name)
+    );
 
     let search_response = client
         .get(&search_url)
-        .header("Authorization", format!("Bearer {}", global_config.system_token))
+        .header(
+            "Authorization",
+            format!("Bearer {}", global_config.system_token),
+        )
         .header("New-Api-User", &global_config.user_id)
         .header("Content-Type", "application/json")
         .send()
@@ -742,7 +758,8 @@ async fn generate_api_key_for_tool(tool: String) -> Result<GenerateApiKeyResult,
 #[tauri::command]
 async fn get_usage_stats() -> Result<UsageStatsResult, String> {
     // 读取全局配置
-    let global_config = get_global_config().await?
+    let global_config = get_global_config()
+        .await?
         .ok_or("请先配置用户ID和系统访问令牌")?;
 
     // 计算时间戳（北京时间）
@@ -768,7 +785,10 @@ async fn get_usage_stats() -> Result<UsageStatsResult, String> {
 
     let response = client
         .get(&url)
-        .header("Authorization", format!("Bearer {}", global_config.system_token))
+        .header(
+            "Authorization",
+            format!("Bearer {}", global_config.system_token),
+        )
         .header("New-Api-User", &global_config.user_id)
         .header("Content-Type", "application/json")
         .send()
@@ -809,7 +829,8 @@ async fn get_usage_stats() -> Result<UsageStatsResult, String> {
 #[tauri::command]
 async fn get_user_quota() -> Result<UserQuotaResult, String> {
     // 读取全局配置
-    let global_config = get_global_config().await?
+    let global_config = get_global_config()
+        .await?
         .ok_or("请先配置用户ID和系统访问令牌")?;
 
     // 调用API
@@ -818,7 +839,10 @@ async fn get_user_quota() -> Result<UserQuotaResult, String> {
 
     let response = client
         .get(url)
-        .header("Authorization", format!("Bearer {}", global_config.system_token))
+        .header(
+            "Authorization",
+            format!("Bearer {}", global_config.system_token),
+        )
         .header("New-Api-User", &global_config.user_id)
         .header("Content-Type", "application/json")
         .send()
@@ -850,8 +874,14 @@ async fn get_user_quota() -> Result<UserQuotaResult, String> {
 
     #[cfg(debug_assertions)]
     {
-        println!("Raw remaining: {}, converted: {}", user_info.quota, remaining_quota);
-        println!("Raw used: {}, converted: {}", user_info.used_quota, used_quota);
+        println!(
+            "Raw remaining: {}, converted: {}",
+            user_info.quota, remaining_quota
+        );
+        println!(
+            "Raw used: {}, converted: {}",
+            user_info.used_quota, used_quota
+        );
         println!("Total quota: {}", total_quota);
     }
 
@@ -866,7 +896,12 @@ async fn get_user_quota() -> Result<UserQuotaResult, String> {
 }
 
 // 辅助函数：检测当前配置匹配哪个profile
-fn detect_profile_name(tool: &str, active_api_key: &str, active_base_url: &str, home_dir: &std::path::Path) -> Option<String> {
+fn detect_profile_name(
+    tool: &str,
+    active_api_key: &str,
+    active_base_url: &str,
+    home_dir: &std::path::Path,
+) -> Option<String> {
     let config_dir = match tool {
         "claude-code" => home_dir.join(".claude"),
         "codex" => home_dir.join(".codex"),
@@ -888,20 +923,30 @@ fn detect_profile_name(tool: &str, active_api_key: &str, active_base_url: &str, 
             let profile_name = match tool {
                 "claude-code" => {
                     // 匹配 settings.{profile}.json
-                    if file_name_str.starts_with("settings.") && file_name_str.ends_with(".json") && file_name_str != "settings.json" {
-                        file_name_str.strip_prefix("settings.").and_then(|s| s.strip_suffix(".json"))
+                    if file_name_str.starts_with("settings.")
+                        && file_name_str.ends_with(".json")
+                        && file_name_str != "settings.json"
+                    {
+                        file_name_str
+                            .strip_prefix("settings.")
+                            .and_then(|s| s.strip_suffix(".json"))
                     } else {
                         None
                     }
-                },
+                }
                 "codex" => {
                     // 匹配 config.{profile}.toml
-                    if file_name_str.starts_with("config.") && file_name_str.ends_with(".toml") && file_name_str != "config.toml" {
-                        file_name_str.strip_prefix("config.").and_then(|s| s.strip_suffix(".toml"))
+                    if file_name_str.starts_with("config.")
+                        && file_name_str.ends_with(".toml")
+                        && file_name_str != "config.toml"
+                    {
+                        file_name_str
+                            .strip_prefix("config.")
+                            .and_then(|s| s.strip_suffix(".toml"))
                     } else {
                         None
                     }
-                },
+                }
                 "gemini-cli" => {
                     // 匹配 .env.{profile}
                     if file_name_str.starts_with(".env.") && file_name_str != ".env" {
@@ -909,7 +954,7 @@ fn detect_profile_name(tool: &str, active_api_key: &str, active_base_url: &str, 
                     } else {
                         None
                     }
-                },
+                }
                 _ => None,
             };
 
@@ -919,23 +964,26 @@ fn detect_profile_name(tool: &str, active_api_key: &str, active_base_url: &str, 
                     "claude-code" => {
                         if let Ok(content) = fs::read_to_string(entry.path()) {
                             if let Ok(config) = serde_json::from_str::<Value>(&content) {
-                                let backup_api_key = config.get("env")
+                                let backup_api_key = config
+                                    .get("env")
                                     .and_then(|env| env.get("ANTHROPIC_AUTH_TOKEN"))
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("");
-                                let backup_base_url = config.get("env")
+                                let backup_base_url = config
+                                    .get("env")
                                     .and_then(|env| env.get("ANTHROPIC_BASE_URL"))
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("");
 
-                                backup_api_key == active_api_key && backup_base_url == active_base_url
+                                backup_api_key == active_api_key
+                                    && backup_base_url == active_base_url
                             } else {
                                 false
                             }
                         } else {
                             false
                         }
-                    },
+                    }
                     "codex" => {
                         // 需要同时检查 config.toml 和 auth.json
                         let auth_backup = config_dir.join(format!("auth.{}.json", profile));
@@ -943,7 +991,8 @@ fn detect_profile_name(tool: &str, active_api_key: &str, active_base_url: &str, 
                         let mut api_key_matches = false;
                         if let Ok(auth_content) = fs::read_to_string(&auth_backup) {
                             if let Ok(auth) = serde_json::from_str::<Value>(&auth_content) {
-                                let backup_api_key = auth.get("OPENAI_API_KEY")
+                                let backup_api_key = auth
+                                    .get("OPENAI_API_KEY")
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("");
 
@@ -956,24 +1005,26 @@ fn detect_profile_name(tool: &str, active_api_key: &str, active_base_url: &str, 
                         } else {
                             // API Key 匹配，继续检查 base_url
                             if let Ok(config_content) = fs::read_to_string(entry.path()) {
-                                if let Ok(config) = toml::from_str::<toml::Value>(&config_content) {
-                                    if let toml::Value::Table(table) = config {
-                                        if let Some(toml::Value::Table(providers)) = table.get("model_providers") {
-                                            let mut url_matches = false;
-                                            for (_, provider) in providers {
-                                                if let toml::Value::Table(p) = provider {
-                                                    if let Some(toml::Value::String(url)) = p.get("base_url") {
-                                                        if url == active_base_url {
-                                                            url_matches = true;
-                                                            break;
-                                                        }
+                                if let Ok(toml::Value::Table(table)) =
+                                    toml::from_str::<toml::Value>(&config_content)
+                                {
+                                    if let Some(toml::Value::Table(providers)) =
+                                        table.get("model_providers")
+                                    {
+                                        let mut url_matches = false;
+                                        for (_, provider) in providers {
+                                            if let toml::Value::Table(p) = provider {
+                                                if let Some(toml::Value::String(url)) =
+                                                    p.get("base_url")
+                                                {
+                                                    if url == active_base_url {
+                                                        url_matches = true;
+                                                        break;
                                                     }
                                                 }
                                             }
-                                            url_matches
-                                        } else {
-                                            false
                                         }
+                                        url_matches
                                     } else {
                                         false
                                     }
@@ -984,7 +1035,7 @@ fn detect_profile_name(tool: &str, active_api_key: &str, active_base_url: &str, 
                                 false
                             }
                         }
-                    },
+                    }
                     "gemini-cli" => {
                         if let Ok(content) = fs::read_to_string(entry.path()) {
                             let mut backup_api_key = "";
@@ -1009,7 +1060,7 @@ fn detect_profile_name(tool: &str, active_api_key: &str, active_base_url: &str, 
                         } else {
                             false
                         }
-                    },
+                    }
                     _ => false,
                 };
 
@@ -1038,12 +1089,13 @@ async fn get_active_config(tool: String) -> Result<ActiveConfig, String> {
                 });
             }
 
-            let content = fs::read_to_string(&config_path)
-                .map_err(|e| format!("❌ 读取配置失败: {}", e))?;
-            let config: Value = serde_json::from_str(&content)
-                .map_err(|e| format!("❌ 解析配置失败: {}", e))?;
+            let content =
+                fs::read_to_string(&config_path).map_err(|e| format!("❌ 读取配置失败: {}", e))?;
+            let config: Value =
+                serde_json::from_str(&content).map_err(|e| format!("❌ 解析配置失败: {}", e))?;
 
-            let raw_api_key = config.get("env")
+            let raw_api_key = config
+                .get("env")
                 .and_then(|env| env.get("ANTHROPIC_AUTH_TOKEN"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
@@ -1054,7 +1106,8 @@ async fn get_active_config(tool: String) -> Result<ActiveConfig, String> {
                 mask_api_key(raw_api_key)
             };
 
-            let base_url = config.get("env")
+            let base_url = config
+                .get("env")
                 .and_then(|env| env.get("ANTHROPIC_BASE_URL"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("未配置");
@@ -1071,7 +1124,7 @@ async fn get_active_config(tool: String) -> Result<ActiveConfig, String> {
                 base_url: base_url.to_string(),
                 profile_name,
             })
-        },
+        }
         "codex" => {
             let auth_path = home_dir.join(".codex").join("auth.json");
             let config_path = home_dir.join(".codex").join("config.toml");
@@ -1097,8 +1150,8 @@ async fn get_active_config(tool: String) -> Result<ActiveConfig, String> {
             if config_path.exists() {
                 let content = fs::read_to_string(&config_path)
                     .map_err(|e| format!("❌ 读取配置文件失败: {}", e))?;
-                let config: toml::Value = toml::from_str(&content)
-                    .map_err(|e| format!("❌ 解析TOML失败: {}", e))?;
+                let config: toml::Value =
+                    toml::from_str(&content).map_err(|e| format!("❌ 解析TOML失败: {}", e))?;
 
                 if let toml::Value::Table(table) = config {
                     let selected_provider = table
@@ -1108,8 +1161,12 @@ async fn get_active_config(tool: String) -> Result<ActiveConfig, String> {
 
                     if let Some(toml::Value::Table(providers)) = table.get("model_providers") {
                         if let Some(provider_name) = selected_provider.as_deref() {
-                            if let Some(toml::Value::Table(provider_table)) = providers.get(provider_name) {
-                                if let Some(toml::Value::String(url)) = provider_table.get("base_url") {
+                            if let Some(toml::Value::Table(provider_table)) =
+                                providers.get(provider_name)
+                            {
+                                if let Some(toml::Value::String(url)) =
+                                    provider_table.get("base_url")
+                                {
                                     base_url = url.clone();
                                 }
                             }
@@ -1136,8 +1193,12 @@ async fn get_active_config(tool: String) -> Result<ActiveConfig, String> {
                 None
             };
 
-            Ok(ActiveConfig { api_key, base_url, profile_name })
-        },
+            Ok(ActiveConfig {
+                api_key,
+                base_url,
+                profile_name,
+            })
+        }
         "gemini-cli" => {
             let env_path = home_dir.join(".gemini").join(".env");
             if !env_path.exists() {
@@ -1166,7 +1227,7 @@ async fn get_active_config(tool: String) -> Result<ActiveConfig, String> {
                         "GEMINI_API_KEY" => {
                             raw_api_key = value.trim().to_string();
                             api_key = mask_api_key(value.trim());
-                        },
+                        }
                         "GOOGLE_GEMINI_BASE_URL" => base_url = value.trim().to_string(),
                         _ => {}
                     }
@@ -1180,9 +1241,13 @@ async fn get_active_config(tool: String) -> Result<ActiveConfig, String> {
                 None
             };
 
-            Ok(ActiveConfig { api_key, base_url, profile_name })
-        },
-        _ => Err(format!("❌ 未知的工具: {}", tool))
+            Ok(ActiveConfig {
+                api_key,
+                base_url,
+                profile_name,
+            })
+        }
+        _ => Err(format!("❌ 未知的工具: {}", tool)),
     }
 }
 
@@ -1201,16 +1266,11 @@ fn create_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
     let menu = Menu::with_items(
         app,
-        &[
-            &show_item,
-            &PredefinedMenuItem::separator(app)?,
-            &quit_item,
-        ],
+        &[&show_item, &PredefinedMenuItem::separator(app)?, &quit_item],
     )?;
 
     Ok(menu)
 }
-
 
 fn main() {
     let builder = tauri::Builder::default()
@@ -1279,6 +1339,7 @@ fn main() {
 
                                 // macOS: 强制激活应用到前台
                                 #[cfg(target_os = "macos")]
+                                #[allow(deprecated)]
                                 {
                                     use cocoa::appkit::NSApplication;
                                     use cocoa::base::nil;
@@ -1319,6 +1380,7 @@ fn main() {
 
                                 // macOS: 恢复 Dock 图标
                                 #[cfg(target_os = "macos")]
+                                #[allow(deprecated)]
                                 {
                                     use cocoa::appkit::NSApplication;
                                     use cocoa::base::nil;
@@ -1345,6 +1407,7 @@ fn main() {
 
                                 // macOS: 强制激活应用到前台
                                 #[cfg(target_os = "macos")]
+                                #[allow(deprecated)]
                                 {
                                     use cocoa::appkit::NSApplication;
                                     use cocoa::base::nil;
@@ -1384,6 +1447,7 @@ fn main() {
 
                         // macOS: 隐藏 Dock 图标
                         #[cfg(target_os = "macos")]
+                        #[allow(deprecated)]
                         {
                             use cocoa::appkit::NSApplication;
                             use cocoa::base::nil;
@@ -1427,6 +1491,7 @@ fn main() {
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             #[cfg(target_os = "macos")]
+            #[allow(deprecated)]
             {
                 use cocoa::appkit::NSApplication;
                 use cocoa::base::nil;

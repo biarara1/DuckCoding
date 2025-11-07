@@ -24,19 +24,15 @@ pub struct EnvVars {
 /// 安装方法
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum InstallMethod {
-    Official,  // 官方脚本
-    Npm,       // npm install
-    Brew,      // Homebrew (macOS)
+    Official, // 官方脚本
+    Npm,      // npm install
+    Brew,     // Homebrew (macOS)
 }
 
 impl Tool {
     /// 获取所有工具
     pub fn all() -> Vec<Tool> {
-        vec![
-            Tool::claude_code(),
-            Tool::codex(),
-            Tool::gemini_cli(),
-        ]
+        vec![Tool::claude_code(), Tool::codex(), Tool::gemini_cli()]
     }
 
     /// 根据 ID 获取工具
@@ -109,17 +105,17 @@ impl Tool {
             "claude-code" => {
                 methods.push(InstallMethod::Official);
                 methods.push(InstallMethod::Npm);
-            },
+            }
             "codex" => {
                 methods.push(InstallMethod::Official);
                 if cfg!(target_os = "macos") {
                     methods.push(InstallMethod::Brew);
                 }
                 methods.push(InstallMethod::Npm);
-            },
+            }
             "gemini-cli" => {
                 methods.push(InstallMethod::Npm);
-            },
+            }
             _ => {}
         }
 
@@ -161,9 +157,11 @@ impl Tool {
             .unwrap_or("config");
 
         if ext.is_empty() {
-            self.config_dir.join(format!("{}.{}", basename, profile_name))
+            self.config_dir
+                .join(format!("{}.{}", basename, profile_name))
         } else {
-            self.config_dir.join(format!("{}.{}.{}", basename, profile_name, ext))
+            self.config_dir
+                .join(format!("{}.{}.{}", basename, profile_name, ext))
         }
     }
 }

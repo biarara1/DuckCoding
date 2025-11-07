@@ -1,6 +1,6 @@
-use std::process::{Command, Output};
-use std::io;
 use super::platform::PlatformInfo;
+use std::io;
+use std::process::{Command, Output};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -54,21 +54,21 @@ impl CommandExecutor {
             #[cfg(target_os = "windows")]
             {
                 Command::new("cmd")
-                    .args(&["/C", command_str])
-                    .creation_flags(0x08000000)  // CREATE_NO_WINDOW
+                    .args(["/C", command_str])
+                    .creation_flags(0x08000000) // CREATE_NO_WINDOW
                     .env("PATH", enhanced_path)
                     .output()
             }
             #[cfg(not(target_os = "windows"))]
             {
                 Command::new("cmd")
-                    .args(&["/C", command_str])
+                    .args(["/C", command_str])
                     .env("PATH", enhanced_path)
                     .output()
             }
         } else {
             Command::new("sh")
-                .args(&["-c", command_str])
+                .args(["-c", command_str])
                 .env("PATH", enhanced_path)
                 .output()
         };
@@ -135,11 +135,7 @@ mod tests {
         let executor = CommandExecutor::new();
 
         // Test a command that should exist on all platforms
-        let result = if cfg!(windows) {
-            executor.execute("echo test")
-        } else {
-            executor.execute("echo test")
-        };
+        let result = executor.execute("echo test");
 
         assert!(result.success);
         assert!(result.stdout.contains("test"));

@@ -1,7 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Wallet, Activity } from "lucide-react";
-import type { UserQuotaResult } from "@/lib/tauri-commands";
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Wallet, Activity } from 'lucide-react';
+import type { UserQuotaResult } from '@/lib/tauri-commands';
 
 interface QuotaCardProps {
   quota: UserQuotaResult | null;
@@ -48,9 +48,7 @@ export function QuotaCard({ quota, loading }: QuotaCardProps) {
     );
   }
 
-  const usagePercentage = quota.total_quota > 0
-    ? (quota.used_quota / quota.total_quota) * 100
-    : 0;
+  const usagePercentage = quota.total_quota > 0 ? (quota.used_quota / quota.total_quota) * 100 : 0;
 
   const formatQuota = (value: number): string => {
     return `¥${value.toFixed(4)}`;
@@ -69,9 +67,7 @@ export function QuotaCard({ quota, loading }: QuotaCardProps) {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">总额度</span>
-            <span className="text-lg font-semibold">
-              {formatQuota(quota.total_quota)}
-            </span>
+            <span className="text-lg font-semibold">{formatQuota(quota.total_quota)}</span>
           </div>
         </div>
 
@@ -79,23 +75,17 @@ export function QuotaCard({ quota, loading }: QuotaCardProps) {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">已使用</span>
-            <span className="text-lg font-semibold">
-              {formatQuota(quota.used_quota)}
-            </span>
+            <span className="text-lg font-semibold">{formatQuota(quota.used_quota)}</span>
           </div>
           <Progress value={usagePercentage} className="h-1.5" />
-          <p className="text-xs text-muted-foreground text-right">
-            {usagePercentage.toFixed(1)}%
-          </p>
+          <p className="text-xs text-muted-foreground text-right">{usagePercentage.toFixed(1)}%</p>
         </div>
 
         {/* 剩余额度 */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">剩余额度</span>
-            <span className="text-lg font-semibold">
-              {formatQuota(quota.remaining_quota)}
-            </span>
+            <span className="text-lg font-semibold">{formatQuota(quota.remaining_quota)}</span>
           </div>
         </div>
 
@@ -106,9 +96,7 @@ export function QuotaCard({ quota, loading }: QuotaCardProps) {
               <Activity className="h-3.5 w-3.5" />
               总请求次数
             </span>
-            <span className="text-base font-semibold">
-              {quota.request_count.toLocaleString()}
-            </span>
+            <span className="text-base font-semibold">{quota.request_count.toLocaleString()}</span>
           </div>
         </div>
       </CardContent>

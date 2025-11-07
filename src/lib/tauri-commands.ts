@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from '@tauri-apps/api/core';
 
 export interface ToolStatus {
   id: string;
@@ -19,8 +19,8 @@ export interface UpdateResult {
   has_update: boolean;
   current_version: string | null;
   latest_version: string | null;
-  mirror_version?: string | null;      // 镜像实际可安装的版本
-  mirror_is_stale?: boolean | null;    // 镜像是否滞后
+  mirror_version?: string | null; // 镜像实际可安装的版本
+  mirror_is_stale?: boolean | null; // 镜像是否滞后
   tool_id?: string;
 }
 
@@ -75,27 +75,31 @@ export interface NodeEnvironment {
 }
 
 export async function checkInstallations(): Promise<ToolStatus[]> {
-  return await invoke<ToolStatus[]>("check_installations");
+  return await invoke<ToolStatus[]>('check_installations');
 }
 
 export async function checkNodeEnvironment(): Promise<NodeEnvironment> {
-  return await invoke<NodeEnvironment>("check_node_environment");
+  return await invoke<NodeEnvironment>('check_node_environment');
 }
 
-export async function installTool(tool: string, method: string, force?: boolean): Promise<InstallResult> {
-  return await invoke<InstallResult>("install_tool", { tool, method, force });
+export async function installTool(
+  tool: string,
+  method: string,
+  force?: boolean,
+): Promise<InstallResult> {
+  return await invoke<InstallResult>('install_tool', { tool, method, force });
 }
 
 export async function checkUpdate(tool: string): Promise<UpdateResult> {
-  return await invoke<UpdateResult>("check_update", { tool });
+  return await invoke<UpdateResult>('check_update', { tool });
 }
 
 export async function checkAllUpdates(): Promise<UpdateResult[]> {
-  return await invoke<UpdateResult[]>("check_all_updates");
+  return await invoke<UpdateResult[]>('check_all_updates');
 }
 
 export async function updateTool(tool: string, force?: boolean): Promise<UpdateResult> {
-  return await invoke<UpdateResult>("update_tool", { tool, force });
+  return await invoke<UpdateResult>('update_tool', { tool, force });
 }
 
 export async function configureApi(
@@ -103,9 +107,9 @@ export async function configureApi(
   provider: string,
   apiKey: string,
   baseUrl?: string,
-  profileName?: string
+  profileName?: string,
 ): Promise<void> {
-  return await invoke<void>("configure_api", {
+  return await invoke<void>('configure_api', {
     tool,
     provider,
     apiKey,
@@ -115,40 +119,40 @@ export async function configureApi(
 }
 
 export async function listProfiles(tool: string): Promise<string[]> {
-  return await invoke<string[]>("list_profiles", { tool });
+  return await invoke<string[]>('list_profiles', { tool });
 }
 
 export async function switchProfile(tool: string, profile: string): Promise<void> {
-  return await invoke<void>("switch_profile", { tool, profile });
+  return await invoke<void>('switch_profile', { tool, profile });
 }
 
 export async function deleteProfile(tool: string, profile: string): Promise<void> {
-  return await invoke<void>("delete_profile", { tool, profile });
+  return await invoke<void>('delete_profile', { tool, profile });
 }
 
 export async function getActiveConfig(tool: string): Promise<ActiveConfig> {
-  return await invoke<ActiveConfig>("get_active_config", { tool });
+  return await invoke<ActiveConfig>('get_active_config', { tool });
 }
 
 export async function saveGlobalConfig(userId: string, systemToken: string): Promise<void> {
-  return await invoke<void>("save_global_config", {
+  return await invoke<void>('save_global_config', {
     userId: userId,
-    systemToken: systemToken
+    systemToken: systemToken,
   });
 }
 
 export async function getGlobalConfig(): Promise<GlobalConfig | null> {
-  return await invoke<GlobalConfig | null>("get_global_config");
+  return await invoke<GlobalConfig | null>('get_global_config');
 }
 
 export async function generateApiKeyForTool(tool: string): Promise<GenerateApiKeyResult> {
-  return await invoke<GenerateApiKeyResult>("generate_api_key_for_tool", { tool });
+  return await invoke<GenerateApiKeyResult>('generate_api_key_for_tool', { tool });
 }
 
 export async function getUsageStats(): Promise<UsageStatsResult> {
-  return await invoke<UsageStatsResult>("get_usage_stats");
+  return await invoke<UsageStatsResult>('get_usage_stats');
 }
 
 export async function getUserQuota(): Promise<UserQuotaResult> {
-  return await invoke<UserQuotaResult>("get_user_quota");
+  return await invoke<UserQuotaResult>('get_user_quota');
 }
