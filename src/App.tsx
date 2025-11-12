@@ -1166,8 +1166,10 @@ function App() {
       setBaseUrl('');
       setProfileName('');
 
-      // 重新加载配置列表
-      await loadAllProfiles();
+      // 重新加载配置列表，但不要阻塞 UI
+      loadAllProfiles().catch((error) => {
+        console.error('Failed to refresh profiles after saving config:', error);
+      });
 
       // 关闭确认对话框
       setConfigOverrideDialog({ open: false, targetProfile: '', willOverride: false });
@@ -2367,9 +2369,15 @@ function App() {
                   // 发起测试请求通过后端
                   const res = await testProxyRequest();
                   if (res.success) {
-                    toast({ title: '代理测试成功', description: `代理: ${current}\n状态: ${res.status}` });
+                    toast({
+                      title: '代理测试成功',
+                      description: `代理: ${current}\n状态: ${res.status}`,
+                    });
                   } else {
-                    toast({ title: '代理测试失败', description: `错误: ${res.error ?? 'unknown'}` });
+                    toast({
+                      title: '代理测试失败',
+                      description: `错误: ${res.error ?? 'unknown'}`,
+                    });
                   }
                 } catch (err) {
                   toast({ title: '代理测试失败', description: String(err) });

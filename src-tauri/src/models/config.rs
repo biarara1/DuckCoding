@@ -20,4 +20,3 @@ pub struct GlobalConfig {
     #[serde(default)]
     pub proxy_password: Option<String>,
 }
-

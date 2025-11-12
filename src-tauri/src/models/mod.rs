@@ -1,5 +1,5 @@
-pub mod tool;
 pub mod config;
+pub mod tool;
 
-pub use tool::*;
 pub use config::*;
+pub use tool::*;

@@ -42,9 +42,10 @@ impl ProxyService {
         let proxy_type = config.proxy_type.as_deref().unwrap_or("http");
 
         // 构建认证部分
-        let auth = if let (Some(username), Some(password)) =
-            (config.proxy_username.as_ref(), config.proxy_password.as_ref())
-        {
+        let auth = if let (Some(username), Some(password)) = (
+            config.proxy_username.as_ref(),
+            config.proxy_password.as_ref(),
+        ) {
             if !username.is_empty() && !password.is_empty() {
                 format!("{}:{}@", username, password)
             } else {
