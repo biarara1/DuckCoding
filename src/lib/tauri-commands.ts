@@ -39,6 +39,13 @@ export interface GlobalConfig {
   proxy_port?: string;
   proxy_username?: string;
   proxy_password?: string;
+  // 透明代理功能 (实验性)
+  transparent_proxy_enabled?: boolean;
+  transparent_proxy_port?: number;
+  transparent_proxy_api_key?: string;
+  // 保存真实的 API 配置
+  transparent_proxy_real_api_key?: string;
+  transparent_proxy_real_base_url?: string;
 }
 
 export interface GenerateApiKeyResult {
@@ -183,4 +190,32 @@ export async function getUserQuota(): Promise<UserQuotaResult> {
 
 export async function applyCloseAction(action: CloseAction): Promise<void> {
   return await invoke<void>('handle_close_action', { action });
+}
+
+// 透明代理相关接口和函数
+export interface TransparentProxyStatus {
+  running: boolean;
+  port: number;
+}
+
+export async function startTransparentProxy(): Promise<string> {
+  return await invoke<string>('start_transparent_proxy');
+}
+
+export async function stopTransparentProxy(): Promise<string> {
+  return await invoke<string>('stop_transparent_proxy');
+}
+
+export async function getTransparentProxyStatus(): Promise<TransparentProxyStatus> {
+  return await invoke<TransparentProxyStatus>('get_transparent_proxy_status');
+}
+
+export async function updateTransparentProxyConfig(
+  newApiKey: string,
+  newBaseUrl: string,
+): Promise<string> {
+  return await invoke<string>('update_transparent_proxy_config', {
+    newApiKey,
+    newBaseUrl,
+  });
 }

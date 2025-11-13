@@ -11,8 +11,10 @@ pub use services::installer::InstallerService;
 pub use models::InstallMethod; // InstallMethod is defined in models (tool.rs) — re-export from models
 pub use services::version::VersionService;
 pub use services::proxy::ProxyService;
+pub use services::transparent_proxy::{TransparentProxyService, ProxyConfig};
+pub use services::transparent_proxy_config::TransparentProxyConfigService;
 
 pub use utils::*;
 
-// 重新导出常用类型
+// ���新导出常用类型
 pub use anyhow::{Context, Result};

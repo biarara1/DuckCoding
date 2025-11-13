@@ -17,6 +17,10 @@ use tauri::{
 use duckcoding::{ConfigService, InstallMethod, InstallerService, Tool, VersionService};
 // Use the shared GlobalConfig from the library crate (models::config)
 use duckcoding::GlobalConfig;
+// 导入透明代理服务
+use duckcoding::{TransparentProxyService, ProxyConfig, TransparentProxyConfigService};
+use std::sync::Arc;
+use tokio::sync::Mutex as TokioMutex;
 
 // DuckCoding API 响应结构
 #[derive(serde::Deserialize, Debug)]
@@ -519,7 +523,11 @@ async fn list_profiles(tool: String) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-async fn switch_profile(tool: String, profile: String) -> Result<(), String> {
+async fn switch_profile(
+    tool: String,
+    profile: String,
+    state: tauri::State<'_, TransparentProxyState>,
+) -> Result<(), String> {
     #[cfg(debug_assertions)]
     println!(
         "Switching profile for {} to {} (using ConfigService)",
@@ -531,6 +539,97 @@ async fn switch_profile(tool: String, profile: String) -> Result<(), String> {
 
     // 使用 ConfigService 激活配置
     ConfigService::activate_profile(&tool_obj, &profile).map_err(|e| e.to_string())?;
+
+    // 如果是 ClaudeCode 且透明代理已启用，需要更新真实配置
+    if tool == "claude-code" {
+        // 读取全局配置
+        if let Ok(Some(mut global_config)) = get_global_config().await {
+            if global_config.transparent_proxy_enabled {
+                // 读取切换后的真实配置
+                let config_path = tool_obj.config_dir.join(&tool_obj.config_file);
+                if config_path.exists() {
+                    if let Ok(content) = fs::read_to_string(&config_path) {
+                        if let Ok(settings) = serde_json::from_str::<Value>(&content) {
+                            if let Some(env) = settings.get("env").and_then(|v| v.as_object()) {
+                                let new_api_key = env
+                                    .get("ANTHROPIC_AUTH_TOKEN")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                let new_base_url = env
+                                    .get("ANTHROPIC_BASE_URL")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+
+                                // 检查是否指向本地代理（说明透明代理正在运行）
+                                let is_proxy_running = new_base_url.contains("127.0.0.1");
+
+                                if !is_proxy_running && !new_api_key.is_empty() && !new_base_url.is_empty() {
+                                    // 保存新的真实配置到全局配置
+                                    TransparentProxyConfigService::update_real_config(
+                                        &tool_obj,
+                                        &mut global_config,
+                                        new_api_key,
+                                        new_base_url,
+                                    )
+                                    .map_err(|e| format!("更新真实配置失败: {}", e))?;
+
+                                    // 保存全局配置
+                                    save_global_config(global_config.clone())
+                                        .await
+                                        .map_err(|e| format!("保存全局配置失败: {}", e))?;
+
+                                    // 如果代理服务正在运行，更新代理配置
+                                    let service = state.service.lock().await;
+                                    if service.is_running().await {
+                                        let local_api_key = global_config
+                                            .transparent_proxy_api_key
+                                            .clone()
+                                            .unwrap_or_default();
+
+                                        let proxy_config = ProxyConfig {
+                                            target_api_key: new_api_key.to_string(),
+                                            target_base_url: new_base_url.to_string(),
+                                            local_api_key,
+                                        };
+
+                                        service
+                                            .update_config(proxy_config)
+                                            .await
+                                            .map_err(|e| format!("更新代理配置失败: {}", e))?;
+
+                                        println!("✅ 透明代理配置已自动更新");
+                                    }
+
+                                    // 恢复 ClaudeCode 配置指向本地代理
+                                    let local_proxy_port = global_config.transparent_proxy_port;
+                                    let local_proxy_key = global_config.transparent_proxy_api_key.unwrap_or_default();
+
+                                    let mut settings_mut = settings.clone();
+                                    if let Some(env_mut) = settings_mut.get_mut("env").and_then(|v| v.as_object_mut()) {
+                                        env_mut.insert(
+                                            "ANTHROPIC_AUTH_TOKEN".to_string(),
+                                            Value::String(local_proxy_key),
+                                        );
+                                        env_mut.insert(
+                                            "ANTHROPIC_BASE_URL".to_string(),
+                                            Value::String(format!("http://127.0.0.1:{}", local_proxy_port)),
+                                        );
+
+                                        let json = serde_json::to_string_pretty(&settings_mut)
+                                            .map_err(|e| format!("序列化配置失败: {}", e))?;
+                                        fs::write(&config_path, json)
+                                            .map_err(|e| format!("写入配置失败: {}", e))?;
+
+                                        println!("✅ ClaudeCode 配置已恢复指向本地代理");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Ok(())
 }
@@ -1413,8 +1512,196 @@ fn build_reqwest_client() -> Result<reqwest::Client, String> {
     }
 }
 
+// 透明代理全局状态
+struct TransparentProxyState {
+    service: Arc<TokioMutex<TransparentProxyService>>,
+}
+
+// 透明代理相关的 Tauri Commands
+#[derive(serde::Serialize)]
+struct TransparentProxyStatus {
+    running: bool,
+    port: u16,
+}
+
+#[tauri::command]
+async fn start_transparent_proxy(
+    state: tauri::State<'_, TransparentProxyState>,
+) -> Result<String, String> {
+    // 读取全局配置
+    let mut config = get_global_config()
+        .await
+        .map_err(|e| format!("读取配置失败: {}", e))?
+        .ok_or_else(|| "全局配置不存在，请先配置用户信息".to_string())?;
+
+    if !config.transparent_proxy_enabled {
+        return Err("透明代理未启用，请先在设置中启用".to_string());
+    }
+
+    let local_api_key = config
+        .transparent_proxy_api_key
+        .clone()
+        .ok_or_else(|| "透明代理保护密钥未设置".to_string())?;
+
+    let proxy_port = config.transparent_proxy_port;
+
+    // 如果是第一次启动，需要保存当前配置并修改 ClaudeCode 配置
+    if config.transparent_proxy_real_api_key.is_none() {
+        let tool = Tool::claude_code();
+
+        // 启用透明代理（保存真实配置并修改 ClaudeCode 配置）
+        TransparentProxyConfigService::enable_transparent_proxy(
+            &tool,
+            &mut config,
+            proxy_port,
+            &local_api_key,
+        )
+        .map_err(|e| format!("启用透明代理失败: {}", e))?;
+
+        // 保存更新后的全局配置
+        save_global_config(config.clone())
+            .await
+            .map_err(|e| format!("保存配置失败: {}", e))?;
+    }
+
+    // 从全局配置获取真实的 API 配置
+    let (target_api_key, target_base_url) =
+        TransparentProxyConfigService::get_real_config(&config)
+            .map_err(|e| format!("获取真实配置失败: {}", e))?;
+
+    println!("🔑 真实 API Key: {}...", &target_api_key[..4.min(target_api_key.len())]);
+    println!("🌐 真实 Base URL: {}", target_base_url);
+
+    // 创建代理配置
+    let proxy_config = ProxyConfig {
+        target_api_key,
+        target_base_url,
+        local_api_key,
+    };
+
+    // 启动代理服务
+    let service = state.service.lock().await;
+    service
+        .start(proxy_config)
+        .await
+        .map_err(|e| format!("启动透明代理服务失败: {}", e))?;
+
+    Ok(format!(
+        "✅ 透明代理已启动\n监听端口: {}\nClaudeCode 请求将自动转发",
+        proxy_port
+    ))
+}
+
+#[tauri::command]
+async fn stop_transparent_proxy(
+    state: tauri::State<'_, TransparentProxyState>,
+) -> Result<String, String> {
+    // 读取全局配置
+    let config = get_global_config()
+        .await
+        .map_err(|e| format!("读取配置失败: {}", e))?
+        .ok_or_else(|| "全局配置不存在".to_string())?;
+
+    // 停止代理服务
+    let service = state.service.lock().await;
+    service
+        .stop()
+        .await
+        .map_err(|e| format!("停止透明代理服务失败: {}", e))?;
+
+    // 恢复 ClaudeCode 配置
+    if config.transparent_proxy_real_api_key.is_some() {
+        let tool = Tool::claude_code();
+        TransparentProxyConfigService::disable_transparent_proxy(&tool, &config)
+            .map_err(|e| format!("恢复配置失败: {}", e))?;
+    }
+
+    Ok("✅ 透明代理已停止\nClaudeCode 配置已恢复".to_string())
+}
+
+#[tauri::command]
+async fn get_transparent_proxy_status(
+    state: tauri::State<'_, TransparentProxyState>,
+) -> Result<TransparentProxyStatus, String> {
+    let config = get_global_config().await.ok().flatten();
+    let port = config
+        .as_ref()
+        .map(|c| c.transparent_proxy_port)
+        .unwrap_or(8787);
+
+    let service = state.service.lock().await;
+    let running = service.is_running().await;
+
+    Ok(TransparentProxyStatus { running, port })
+}
+
+#[tauri::command]
+async fn update_transparent_proxy_config(
+    state: tauri::State<'_, TransparentProxyState>,
+    new_api_key: String,
+    new_base_url: String,
+) -> Result<String, String> {
+    // 读取全局配置
+    let mut config = get_global_config()
+        .await
+        .map_err(|e| format!("读取配置失败: {}", e))?
+        .ok_or_else(|| "全局配置不存在".to_string())?;
+
+    if !config.transparent_proxy_enabled {
+        return Err("透明代理未启用".to_string());
+    }
+
+    let local_api_key = config
+        .transparent_proxy_api_key
+        .clone()
+        .ok_or_else(|| "透明代理保护密钥未设置".to_string())?;
+
+    // 更新全局配置中的真实配置
+    let tool = Tool::claude_code();
+    TransparentProxyConfigService::update_real_config(
+        &tool,
+        &mut config,
+        &new_api_key,
+        &new_base_url,
+    )
+    .map_err(|e| format!("更新配置失败: {}", e))?;
+
+    // 保存更新后的全局配置
+    save_global_config(config.clone())
+        .await
+        .map_err(|e| format!("保存配置失败: {}", e))?;
+
+    // 创建新的代理配置
+    let proxy_config = ProxyConfig {
+        target_api_key: new_api_key.clone(),
+        target_base_url: new_base_url.clone(),
+        local_api_key,
+    };
+
+    // 更新代理服务的配置
+    let service = state.service.lock().await;
+    service
+        .update_config(proxy_config)
+        .await
+        .map_err(|e| format!("更新代理配置失败: {}", e))?;
+
+    println!("🔄 透明代理配置已更新:");
+    println!("   API Key: {}...", &new_api_key[..4.min(new_api_key.len())]);
+    println!("   Base URL: {}", new_base_url);
+
+    Ok("✅ 透明代理配置已更新，无需重启".to_string())
+}
+
 fn main() {
+    // 创建透明代理服务实例
+    let transparent_proxy_port = 8787; // 默认端口，实际会从配置读取
+    let transparent_proxy_service = TransparentProxyService::new(transparent_proxy_port);
+    let transparent_proxy_state = TransparentProxyState {
+        service: Arc::new(TokioMutex::new(transparent_proxy_service)),
+    };
+
     let builder = tauri::Builder::default()
+        .manage(transparent_proxy_state)
         .setup(|app| {
             // 尝试在应用启动时加载全局配置并应用代理设置，确保子进程继承代理 env
             if let Ok(config_path) = get_global_config_path() {
@@ -1566,9 +1853,14 @@ fn main() {
             get_user_quota,
             // expose current proxy for debugging/testing
             get_current_proxy,
-             handle_close_action,
-             apply_proxy_now,
-             test_proxy_request
+            handle_close_action,
+            apply_proxy_now,
+            test_proxy_request,
+            // 透明代理相关命令
+            start_transparent_proxy,
+            stop_transparent_proxy,
+            get_transparent_proxy_status,
+            update_transparent_proxy_config,
          ]);
 
     // 使用自定义事件循环处理 macOS Reopen 事件

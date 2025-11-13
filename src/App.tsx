@@ -70,6 +70,10 @@ import {
   getCurrentProxy,
   applyProxyNow,
   testProxyRequest,
+  startTransparentProxy,
+  stopTransparentProxy,
+  getTransparentProxyStatus,
+  // updateTransparentProxyConfig, // 后端在 switch_profile 中自动处理
   type ToolStatus,
   type NodeEnvironment,
   type ActiveConfig,
@@ -77,6 +81,7 @@ import {
   type UsageStatsResult,
   type UserQuotaResult,
   type CloseAction,
+  type TransparentProxyStatus,
 } from '@/lib/tauri-commands';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -279,6 +284,14 @@ function App() {
   const [proxyPassword, setProxyPassword] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const [generatingKey, setGeneratingKey] = useState(false);
+
+  // 透明代理状态 (实验性功能)
+  const [transparentProxyEnabled, setTransparentProxyEnabled] = useState(false);
+  const [transparentProxyPort, setTransparentProxyPort] = useState(8787);
+  const [transparentProxyApiKey, setTransparentProxyApiKey] = useState('');
+  const [transparentProxyStatus, setTransparentProxyStatus] = useState<TransparentProxyStatus | null>(null);
+  const [startingProxy, setStartingProxy] = useState(false);
+  const [stoppingProxy, setStoppingProxy] = useState(false);
 
   // 统计数据状态
   const [usageStats, setUsageStats] = useState<UsageStatsResult | null>(null);
@@ -615,7 +628,14 @@ function App() {
         setProxyPort(config.proxy_port || '');
         setProxyUsername(config.proxy_username || '');
         setProxyPassword(config.proxy_password || '');
+        // 加载透明代理配置
+        setTransparentProxyEnabled(config.transparent_proxy_enabled || false);
+        setTransparentProxyPort(config.transparent_proxy_port || 8787);
+        setTransparentProxyApiKey(config.transparent_proxy_api_key || '');
       }
+      // 加载透明代理状态
+      const status = await getTransparentProxyStatus();
+      setTransparentProxyStatus(status);
     } catch (error) {
       console.error('Failed to load global config:', error);
     }
@@ -842,6 +862,26 @@ function App() {
       return;
     }
 
+    // 验证透明代理配置
+    if (transparentProxyEnabled) {
+      if (!transparentProxyApiKey || transparentProxyApiKey.trim().length < 8) {
+        toast({
+          title: '验证失败',
+          description: '启用透明代理时，必须设置至少8位的保护密钥',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (transparentProxyPort < 1024 || transparentProxyPort > 65535) {
+        toast({
+          title: '验证失败',
+          description: '透明代理端口必须在 1024-65535 之间',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     try {
       setSavingSettings(true);
       const configToSave: GlobalConfig = {
@@ -853,6 +893,9 @@ function App() {
         proxy_port: proxyPort.trim() || undefined,
         proxy_username: proxyUsername.trim() || undefined,
         proxy_password: proxyPassword.trim() || undefined,
+        transparent_proxy_enabled: transparentProxyEnabled,
+        transparent_proxy_port: transparentProxyPort,
+        transparent_proxy_api_key: transparentProxyEnabled ? transparentProxyApiKey.trim() : undefined,
       };
       await saveGlobalConfig(configToSave);
       setGlobalConfig(configToSave);
@@ -871,6 +914,68 @@ function App() {
     } finally {
       setSavingSettings(false);
     }
+  };
+
+  // 启动透明代理
+  const handleStartTransparentProxy = async () => {
+    try {
+      setStartingProxy(true);
+      const result = await startTransparentProxy();
+      toast({
+        title: '启动成功',
+        description: result,
+      });
+      // 重新加载状态
+      const status = await getTransparentProxyStatus();
+      setTransparentProxyStatus(status);
+    } catch (error) {
+      console.error('Failed to start transparent proxy:', error);
+      toast({
+        title: '启动失败',
+        description: String(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setStartingProxy(false);
+    }
+  };
+
+  // 停止透明代理
+  const handleStopTransparentProxy = async () => {
+    try {
+      setStoppingProxy(true);
+      const result = await stopTransparentProxy();
+      toast({
+        title: '停止成功',
+        description: result,
+      });
+      // 重新加载状态
+      const status = await getTransparentProxyStatus();
+      setTransparentProxyStatus(status);
+    } catch (error) {
+      console.error('Failed to stop transparent proxy:', error);
+      toast({
+        title: '停止失败',
+        description: String(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setStoppingProxy(false);
+    }
+  };
+
+  // 生成随机透明代理密钥
+  const handleGenerateProxyKey = () => {
+    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let key = '';
+    for (let i = 0; i < 32; i++) {
+      key += charset.charAt(Math.floor(Math.random() * charset.length));
+    }
+    setTransparentProxyApiKey(key);
+    toast({
+      title: '密钥已生成',
+      description: '请保存设置以应用更改',
+    });
   };
 
   // 一键生成API Key
@@ -1198,6 +1303,11 @@ function App() {
   const handleSwitchProfile = async (toolId: string, profile: string) => {
     try {
       setSwitching(true);
+
+      // 检查是否启用了透明代理
+      const isProxyEnabled = globalConfig?.transparent_proxy_enabled && transparentProxyStatus?.running;
+
+      // 切换配置（后端会自动处理透明代理更新）
       await switchProfile(toolId, profile);
       setSelectedProfile({ ...selectedProfile, [toolId]: profile });
 
@@ -1209,10 +1319,19 @@ function App() {
         console.error('Failed to reload active config', error);
       }
 
-      toast({
-        title: '切换成功',
-        description: '配置切换成功！\n请重启相关 CLI 工具以使新配置生效。',
-      });
+      // 如果是 ClaudeCode 且透明代理已启用，刷新配置
+      if (toolId === 'claude-code' && isProxyEnabled) {
+        await loadGlobalConfig();
+        toast({
+          title: '切换成功',
+          description: '✅ 配置已切换\n✅ 透明代理已自动更新\n无需重启终端',
+        });
+      } else {
+        toast({
+          title: '切换成功',
+          description: '配置切换成功！\n请重启相关 CLI 工具以使新配置生效。',
+        });
+      }
     } catch (error) {
       console.error('Failed to switch profile:', error);
       toast({
@@ -2054,19 +2173,94 @@ function App() {
                   <p className="text-sm text-muted-foreground">在不同的配置文件之间快速切换</p>
                 </div>
 
-                {/* 重启提示 */}
-                <div className="mb-6 p-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950 dark:to-orange-950 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                      <h4 className="font-semibold text-amber-900 dark:text-amber-100">重要提示</h4>
-                      <p className="text-sm text-amber-800 dark:text-amber-200">
-                        切换配置后，如果工具正在运行，<strong>需要重启对应的工具</strong>
-                        才能使新配置生效。
-                      </p>
+                {/* 透明代理状态显示（仅 ClaudeCode） */}
+                {globalConfig?.transparent_proxy_enabled && (
+                  <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-start gap-3 flex-1">
+                        <Power className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                        <div className="space-y-1 flex-1">
+                          <h4 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                            ClaudeCode 透明代理
+                            <Badge variant={transparentProxyStatus?.running ? 'default' : 'secondary'} className="text-xs">
+                              {transparentProxyStatus?.running ? '运行中' : '已停止'}
+                            </Badge>
+                          </h4>
+                          {transparentProxyStatus?.running ? (
+                            <p className="text-sm text-blue-800 dark:text-blue-200">
+                              ✅ 透明代理正在运行，切换配置<strong>无需重启终端</strong>，配置将实时生效
+                            </p>
+                          ) : (
+                            <p className="text-sm text-blue-800 dark:text-blue-200">
+                              透明代理未运行，点击"启动代理"即可实现切换配置无需重启
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {transparentProxyStatus?.running ? (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={handleStopTransparentProxy}
+                            disabled={stoppingProxy}
+                            className="shadow-sm"
+                          >
+                            {stoppingProxy ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                停止中...
+                              </>
+                            ) : (
+                              <>
+                                <Power className="h-4 w-4 mr-1" />
+                                停止代理
+                              </>
+                            )}
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="sm"
+                            onClick={handleStartTransparentProxy}
+                            disabled={startingProxy}
+                            className="shadow-sm"
+                          >
+                            {startingProxy ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                启动中...
+                              </>
+                            ) : (
+                              <>
+                                <Power className="h-4 w-4 mr-1" />
+                                启动代理
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
+
+                {/* 重启提示（仅在透明代理未运行时显示） */}
+                {(!globalConfig?.transparent_proxy_enabled || !transparentProxyStatus?.running) && (
+                  <div className="mb-6 p-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950 dark:to-orange-950 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <h4 className="font-semibold text-amber-900 dark:text-amber-100">重要提示</h4>
+                        <p className="text-sm text-amber-800 dark:text-amber-200">
+                          切换配置后，如果工具正在运行，<strong>需要重启对应的工具</strong>
+                          才能使新配置生效。
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {installedTools.length > 0 ? (
                   <Tabs value={selectedSwitchTab} onValueChange={setSelectedSwitchTab}>
@@ -2204,9 +2398,13 @@ function App() {
             <DialogDescription>配置 DuckCoding 用户凭证、代理等全局选项</DialogDescription>
           </DialogHeader>
           <Tabs defaultValue="basic" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="basic">基本设置</TabsTrigger>
               <TabsTrigger value="proxy">代理设置</TabsTrigger>
+              <TabsTrigger value="experimental">
+                <Sparkles className="h-3 w-3 mr-1" />
+                实验性功能
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="basic" className="space-y-4 py-4">
               <div className="space-y-2">
@@ -2344,6 +2542,175 @@ function App() {
                   </div>
                 </>
               )}
+            </TabsContent>
+            <TabsContent value="experimental" className="space-y-4 py-4">
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/50 rounded-lg border border-amber-200 dark:border-amber-800 mb-4">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-800 dark:text-amber-200">
+                    <p className="font-semibold mb-1">⚠️ 实验性功能</p>
+                    <p className="text-xs">此处功能仍在测试中，可能存在不稳定性。请谨慎使用。</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 透明代理功能 */}
+              <div className="space-y-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Power className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <Label htmlFor="transparent-proxy-enabled" className="text-base font-semibold">
+                        ClaudeCode 透明代理
+                      </Label>
+                      <Badge variant="outline" className="text-xs">
+                        实验性
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      本地代理服务，切换账户无需重启终端
+                    </p>
+                  </div>
+                  <input
+                    id="transparent-proxy-enabled"
+                    type="checkbox"
+                    checked={transparentProxyEnabled}
+                    onChange={(e) => setTransparentProxyEnabled(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                </div>
+
+                {transparentProxyEnabled && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="transparent-proxy-port">监听端口</Label>
+                        <Input
+                          id="transparent-proxy-port"
+                          type="number"
+                          min="1024"
+                          max="65535"
+                          placeholder="8787"
+                          value={transparentProxyPort}
+                          onChange={(e) => setTransparentProxyPort(parseInt(e.target.value) || 8787)}
+                          className="shadow-sm"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          推荐范围: 1024-65535，默认 8787
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="transparent-proxy-key">保护密钥 *</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="transparent-proxy-key"
+                            type="password"
+                            placeholder="至少8位的随机密钥"
+                            value={transparentProxyApiKey}
+                            onChange={(e) => setTransparentProxyApiKey(e.target.value)}
+                            className="shadow-sm flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleGenerateProxyKey}
+                            className="shadow-sm"
+                          >
+                            <Sparkles className="h-4 w-4 mr-1" />
+                            生成
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          用于保护本地代理免受恶意访问，请妥善保管
+                        </p>
+                      </div>
+
+                      {/* 代理状态显示 */}
+                      {transparentProxyStatus && (
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium">代理状态</span>
+                            <Badge variant={transparentProxyStatus.running ? 'default' : 'secondary'}>
+                              {transparentProxyStatus.running ? '运行中' : '已停止'}
+                            </Badge>
+                          </div>
+                          {transparentProxyStatus.running && (
+                            <div className="text-xs text-muted-foreground space-y-1">
+                              <p>监听地址: http://127.0.0.1:{transparentProxyStatus.port}</p>
+                              <p className="text-amber-600 dark:text-amber-400">
+                                ⚡ 透明代理正在运行，ClaudeCode 请求将被自动转发
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 代理控制按钮 */}
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          onClick={handleStartTransparentProxy}
+                          disabled={startingProxy || transparentProxyStatus?.running}
+                          className="flex-1 shadow-sm"
+                        >
+                          {startingProxy ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              启动中...
+                            </>
+                          ) : (
+                            <>
+                              <Power className="h-4 w-4 mr-1" />
+                              启动代理
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleStopTransparentProxy}
+                          disabled={stoppingProxy || !transparentProxyStatus?.running}
+                          className="flex-1 shadow-sm"
+                        >
+                          {stoppingProxy ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              停止中...
+                            </>
+                          ) : (
+                            <>
+                              <Power className="h-4 w-4 mr-1" />
+                              停止代理
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-blue-50 dark:bg-blue-950/50 rounded-lg border border-blue-200 dark:border-blue-800 text-sm">
+                      <div className="flex items-start gap-2">
+                        <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                        <div className="text-xs text-blue-800 dark:text-blue-200">
+                          <p className="font-semibold mb-1">使用说明</p>
+                          <ol className="list-decimal list-inside space-y-1 ml-2">
+                            <li>先配置好 ClaudeCode 的 API（在"配置 API"页面）</li>
+                            <li>启用并保存设置后，点击"启动代理"</li>
+                            <li>之后切换配置时，代理会自动更新转发目标</li>
+                            <li>切换配置无需重启终端，配置实时生效</li>
+                            <li>保护密钥用于验证请求来源，防止恶意访问</li>
+                          </ol>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </TabsContent>
           </Tabs>
           <DialogFooter>
