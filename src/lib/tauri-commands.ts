@@ -1,6 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 
 export interface ToolStatus {
+  mirrorIsStale: boolean;
+  mirrorVersion: string | null;
+  latestVersion: string | null;
+  hasUpdate: boolean;
   id: string;
   name: string;
   installed: boolean;

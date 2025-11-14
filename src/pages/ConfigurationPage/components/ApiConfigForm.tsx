@@ -11,7 +11,6 @@ import {
 } from '@/components/ui/select';
 import { Info, Loader2, Save, Sparkles } from 'lucide-react';
 import { logoMap } from '@/utils/constants';
-import { openExternalLink } from '@/utils/formatting';
 import type { ToolStatus } from '@/lib/tauri-commands';
 
 interface ApiConfigFormProps {

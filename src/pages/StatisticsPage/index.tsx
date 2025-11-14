@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarChart3, Settings as SettingsIcon, RefreshCw, Loader2 } from 'lucide-react';
@@ -6,60 +5,23 @@ import { PageContainer } from '@/components/layout/PageContainer';
 import { QuotaCard } from '@/components/QuotaCard';
 import { TodayStatsCard } from '@/components/TodayStatsCard';
 import { UsageChart } from '@/components/UsageChart';
-import type { GlobalConfig } from '@/lib/tauri-commands';
-import { getGlobalConfig, getUserQuota, getUsageStats } from '@/lib/tauri-commands';
-import type { UserQuotaResult, UsageStatsResult } from '@/lib/tauri-commands';
+import type { GlobalConfig, UserQuotaResult, UsageStatsResult } from '@/lib/tauri-commands';
 
-export function StatisticsPage() {
-  const [globalConfig, setGlobalConfig] = useState<GlobalConfig | null>(null);
-  const [usageStats, setUsageStats] = useState<UsageStatsResult | null>(null);
-  const [userQuota, setUserQuota] = useState<UserQuotaResult | null>(null);
-  const [loadingStats, setLoadingStats] = useState(false);
+interface StatisticsPageProps {
+  globalConfig: GlobalConfig | null;
+  usageStats: UsageStatsResult | null;
+  userQuota: UserQuotaResult | null;
+  statsLoading: boolean;
+  onLoadStatistics: () => void;
+}
 
-  // 加载全局配置
-  useEffect(() => {
-    const loadConfig = async () => {
-      try {
-        const config = await getGlobalConfig();
-        setGlobalConfig(config);
-      } catch (error) {
-        console.error('Failed to load global config:', error);
-      }
-    };
-
-    loadConfig();
-  }, []);
-
-  // 加载统计数据
-  const loadStatistics = async () => {
-    if (!globalConfig?.user_id || !globalConfig?.system_token) {
-      return;
-    }
-
-    try {
-      setLoadingStats(true);
-
-      const [quota, stats] = await Promise.all([
-        getUserQuota(globalConfig.user_id, globalConfig.system_token),
-        getUsageStats(globalConfig.user_id, globalConfig.system_token),
-      ]);
-
-      setUserQuota(quota);
-      setUsageStats(stats);
-    } catch (error) {
-      console.error('Failed to load statistics:', error);
-    } finally {
-      setLoadingStats(false);
-    }
-  };
-
-  // 当配置加载后自动加载统计数据
-  useEffect(() => {
-    if (globalConfig?.user_id && globalConfig?.system_token) {
-      loadStatistics();
-    }
-  }, [globalConfig]);
-
+export function StatisticsPage({
+  globalConfig,
+  usageStats,
+  userQuota,
+  statsLoading,
+  onLoadStatistics,
+}: StatisticsPageProps) {
   const hasCredentials = globalConfig?.user_id && globalConfig?.system_token;
 
   return (
@@ -100,11 +62,11 @@ export function StatisticsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={loadStatistics}
-              disabled={loadingStats}
+              onClick={onLoadStatistics}
+              disabled={statsLoading}
               className="shadow-sm hover:shadow-md transition-all"
             >
-              {loadingStats ? (
+              {statsLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   加载中...
@@ -120,12 +82,12 @@ export function StatisticsPage() {
 
           {/* 顶部卡片网格 - 2列 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <QuotaCard quota={userQuota} loading={loadingStats} />
-            <TodayStatsCard stats={usageStats} loading={loadingStats} />
+            <QuotaCard quota={userQuota} loading={statsLoading} />
+            <TodayStatsCard stats={usageStats} loading={statsLoading} />
           </div>
 
           {/* 用量趋势图 - 全宽 */}
-          <UsageChart stats={usageStats} loading={loadingStats} />
+          <UsageChart stats={usageStats} loading={statsLoading} />
         </div>
       )}
     </PageContainer>

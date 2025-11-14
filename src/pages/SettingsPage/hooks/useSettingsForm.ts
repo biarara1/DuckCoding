@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  getGlobalConfig,
   saveGlobalConfig,
   testProxyRequest,
   type GlobalConfig,
@@ -8,7 +7,12 @@ import {
   type ProxyTestConfig,
 } from '@/lib/tauri-commands';
 
-export function useSettingsForm() {
+interface UseSettingsFormProps {
+  initialConfig: GlobalConfig | null;
+  onConfigChange: () => void;
+}
+
+export function useSettingsForm({ initialConfig, onConfigChange }: UseSettingsFormProps) {
   // 基本设置状态
   const [userId, setUserId] = useState('');
   const [systemToken, setSystemToken] = useState('');
@@ -29,34 +33,30 @@ export function useSettingsForm() {
   const [transparentProxyAllowPublic, setTransparentProxyAllowPublic] = useState(false);
 
   // 状态
-  const [globalConfig, setGlobalConfig] = useState<GlobalConfig | null>(null);
+  const [globalConfig, setGlobalConfig] = useState<GlobalConfig | null>(initialConfig);
   const [savingSettings, setSavingSettings] = useState(false);
   const [testingProxy, setTestingProxy] = useState(false);
 
-  // 加载全局配置
-  const loadGlobalConfig = useCallback(async () => {
-    try {
-      const config = await getGlobalConfig();
-      setGlobalConfig(config);
+  // 当外部 initialConfig 更新时，同步内部状态和表单
+  useEffect(() => {
+    if (initialConfig) {
+      setGlobalConfig(initialConfig);
 
       // 填充表单
-      setUserId(config.user_id || '');
-      setSystemToken(config.system_token || '');
-      setProxyEnabled(config.proxy_enabled || false);
-      setProxyType(config.proxy_type || 'http');
-      setProxyHost(config.proxy_host || '');
-      setProxyPort(config.proxy_port || '');
-      setProxyUsername(config.proxy_username || '');
-      setProxyPassword(config.proxy_password || '');
-      setTransparentProxyEnabled(config.transparent_proxy_enabled || false);
-      setTransparentProxyPort(config.transparent_proxy_port || 8787);
-      setTransparentProxyApiKey(config.transparent_proxy_api_key || '');
-      setTransparentProxyAllowPublic(config.transparent_proxy_allow_public || false);
-    } catch (error) {
-      console.error('Failed to load global config:', error);
-      throw error;
+      setUserId(initialConfig.user_id || '');
+      setSystemToken(initialConfig.system_token || '');
+      setProxyEnabled(initialConfig.proxy_enabled || false);
+      setProxyType(initialConfig.proxy_type || 'http');
+      setProxyHost(initialConfig.proxy_host || '');
+      setProxyPort(initialConfig.proxy_port || '');
+      setProxyUsername(initialConfig.proxy_username || '');
+      setProxyPassword(initialConfig.proxy_password || '');
+      setTransparentProxyEnabled(initialConfig.transparent_proxy_enabled || false);
+      setTransparentProxyPort(initialConfig.transparent_proxy_port || 8787);
+      setTransparentProxyApiKey(initialConfig.transparent_proxy_api_key || '');
+      setTransparentProxyAllowPublic(initialConfig.transparent_proxy_allow_public || false);
     }
-  }, []);
+  }, [initialConfig]);
 
   // 保存配置
   const saveSettings = useCallback(async (): Promise<void> => {
@@ -99,7 +99,9 @@ export function useSettingsForm() {
       };
 
       await saveGlobalConfig(configToSave);
-      await loadGlobalConfig();
+
+      // 通知父组件刷新全局配置
+      onConfigChange();
     } finally {
       setSavingSettings(false);
     }
@@ -117,7 +119,7 @@ export function useSettingsForm() {
     transparentProxyApiKey,
     transparentProxyAllowPublic,
     globalConfig,
-    loadGlobalConfig,
+    onConfigChange,
   ]);
 
   // 生成代理 API Key
@@ -249,7 +251,6 @@ export function useSettingsForm() {
     testingProxy,
 
     // Actions
-    loadGlobalConfig,
     saveSettings,
     generateProxyKey,
     testProxy,

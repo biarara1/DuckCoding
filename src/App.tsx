@@ -11,7 +11,17 @@ import { useToast } from '@/hooks/use-toast';
 import { useAppEvents } from '@/hooks/useAppEvents';
 import { useCloseAction } from '@/hooks/useCloseAction';
 import { Toaster } from '@/components/ui/toaster';
-import { checkInstallations, type CloseAction, type ToolStatus } from '@/lib/tauri-commands';
+import {
+  checkInstallations,
+  getGlobalConfig,
+  getUserQuota,
+  getUsageStats,
+  type CloseAction,
+  type ToolStatus,
+  type GlobalConfig,
+  type UserQuotaResult,
+  type UsageStatsResult,
+} from '@/lib/tauri-commands';
 
 type TabType = 'dashboard' | 'install' | 'config' | 'switch' | 'statistics' | 'settings';
 
@@ -22,6 +32,15 @@ function App() {
   // 全局工具状态缓存
   const [tools, setTools] = useState<ToolStatus[]>([]);
   const [toolsLoading, setToolsLoading] = useState(true);
+
+  // 全局配置缓存（供 StatisticsPage 和 SettingsPage 共享）
+  const [globalConfig, setGlobalConfig] = useState<GlobalConfig | null>(null);
+  const [configLoading, setConfigLoading] = useState(false);
+
+  // 统计数据缓存
+  const [usageStats, setUsageStats] = useState<UsageStatsResult | null>(null);
+  const [userQuota, setUserQuota] = useState<UserQuotaResult | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   // 加载工具状态（全局缓存）
   const loadTools = useCallback(async () => {
@@ -36,10 +55,56 @@ function App() {
     }
   }, []);
 
-  // 初始化加载工具
+  // 加载全局配置（供多处使用）
+  const loadGlobalConfig = useCallback(async () => {
+    try {
+      setConfigLoading(true);
+      const config = await getGlobalConfig();
+      setGlobalConfig(config);
+    } catch (error) {
+      console.error('Failed to load global config:', error);
+    } finally {
+      setConfigLoading(false);
+    }
+  }, []);
+
+  // 加载统计数据（仅在需要时调用）
+  const loadStatistics = useCallback(async () => {
+    if (!globalConfig?.user_id || !globalConfig?.system_token) {
+      return;
+    }
+
+    try {
+      setStatsLoading(true);
+      const [quota, stats] = await Promise.all([getUserQuota(), getUsageStats()]);
+      setUserQuota(quota);
+      setUsageStats(stats);
+    } catch (error) {
+      console.error('Failed to load statistics:', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [globalConfig]);
+
+  // 初始化加载工具和全局配置
   useEffect(() => {
     loadTools();
-  }, [loadTools]);
+    loadGlobalConfig();
+  }, [loadTools, loadGlobalConfig]);
+
+  // 智能预加载：只要有凭证就立即预加载统计数据
+  useEffect(() => {
+    // 条件：配置已加载 + 有凭证 + 还没有统计数据 + 不在加载中
+    if (
+      globalConfig?.user_id &&
+      globalConfig?.system_token &&
+      !usageStats &&
+      !statsLoading
+    ) {
+      // 后台预加载统计数据，无论用户在哪个页面
+      loadStatistics();
+    }
+  }, [globalConfig, usageStats, statsLoading, loadStatistics]);
 
   // 使用关闭动作 Hook
   const {
@@ -88,8 +153,22 @@ function App() {
         {activeTab === 'install' && <InstallationPage tools={tools} loading={toolsLoading} />}
         {activeTab === 'config' && <ConfigurationPage tools={tools} loading={toolsLoading} />}
         {activeTab === 'switch' && <ProfileSwitchPage tools={tools} loading={toolsLoading} />}
-        {activeTab === 'statistics' && <StatisticsPage />}
-        {activeTab === 'settings' && <SettingsPage />}
+        {activeTab === 'statistics' && (
+          <StatisticsPage
+            globalConfig={globalConfig}
+            usageStats={usageStats}
+            userQuota={userQuota}
+            statsLoading={statsLoading}
+            onLoadStatistics={loadStatistics}
+          />
+        )}
+        {activeTab === 'settings' && (
+          <SettingsPage
+            globalConfig={globalConfig}
+            configLoading={configLoading}
+            onConfigChange={loadGlobalConfig}
+          />
+        )}
       </main>
 
       {/* 关闭动作选择对话框 */}

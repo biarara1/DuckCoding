@@ -9,8 +9,19 @@ import { useTransparentProxy } from './hooks/useTransparentProxy';
 import { BasicSettingsTab } from './components/BasicSettingsTab';
 import { ProxySettingsTab } from './components/ProxySettingsTab';
 import { ExperimentalSettingsTab } from './components/ExperimentalSettingsTab';
+import type { GlobalConfig } from '@/lib/tauri-commands';
 
-export function SettingsPage() {
+interface SettingsPageProps {
+  globalConfig: GlobalConfig | null;
+  configLoading: boolean;
+  onConfigChange: () => void;
+}
+
+export function SettingsPage({
+  globalConfig,
+  configLoading,
+  onConfigChange,
+}: SettingsPageProps) {
   const { toast } = useToast();
 
   // 使用自定义 Hooks
@@ -41,14 +52,12 @@ export function SettingsPage() {
     setTransparentProxyApiKey,
     transparentProxyAllowPublic,
     setTransparentProxyAllowPublic,
-    globalConfig,
     savingSettings,
     testingProxy,
-    loadGlobalConfig,
     saveSettings,
     generateProxyKey,
     testProxy,
-  } = useSettingsForm();
+  } = useSettingsForm({ initialConfig: globalConfig, onConfigChange });
 
   const {
     transparentProxyStatus,
@@ -59,19 +68,12 @@ export function SettingsPage() {
     handleStopProxy,
   } = useTransparentProxy();
 
-  // 初始加载
+  // 初始加载透明代理状态
   useEffect(() => {
-    loadGlobalConfig().catch((error) => {
-      toast({
-        title: '加载失败',
-        description: String(error),
-        variant: 'destructive',
-      });
-    });
     loadTransparentProxyStatus().catch((error) => {
       console.error('Failed to load transparent proxy status:', error);
     });
-  }, [loadGlobalConfig, loadTransparentProxyStatus, toast]);
+  }, [loadTransparentProxyStatus]);
 
   // 测试代理连接
   const handleTestProxy = async () => {
