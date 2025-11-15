@@ -13,6 +13,7 @@ import { useCloseAction } from '@/hooks/useCloseAction';
 import { Toaster } from '@/components/ui/toaster';
 import {
   checkInstallations,
+  checkForAppUpdates,
   getGlobalConfig,
   getUserQuota,
   getUsageStats,
@@ -21,6 +22,7 @@ import {
   type GlobalConfig,
   type UserQuotaResult,
   type UsageStatsResult,
+  type UpdateInfo,
 } from '@/lib/tauri-commands';
 
 type TabType = 'dashboard' | 'install' | 'config' | 'switch' | 'statistics' | 'settings';
@@ -41,6 +43,10 @@ function App() {
   const [usageStats, setUsageStats] = useState<UsageStatsResult | null>(null);
   const [userQuota, setUserQuota] = useState<UserQuotaResult | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+
+  // 更新检查状态
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateCheckDone, setUpdateCheckDone] = useState(false);
 
   // 加载工具状态（全局缓存）
   const loadTools = useCallback(async () => {
@@ -86,11 +92,64 @@ function App() {
     }
   }, [globalConfig]);
 
+  // 检查应用更新
+  const checkAppUpdates = useCallback(async () => {
+    // 避免重复检查
+    if (updateCheckDone) {
+      return;
+    }
+
+    try {
+      console.log('Checking for app updates...');
+      const update = await checkForAppUpdates();
+      setUpdateInfo(update);
+
+      // 如果有可用更新，显示通知
+      if (update.has_update) {
+        toast({
+          title: '发现新版本',
+          description: `DuckCoding ${update.latest_version} 现已可用，当前版本：${update.current_version}`,
+          action: (
+            <button
+              onClick={() => {
+                setActiveTab('settings');
+                // 延迟一点时间确保页面切换后再设置子tab
+                setTimeout(() => {
+                  // 通过事件或者状态管理来设置更新tab
+                  const event = new CustomEvent('navigate-to-update-tab');
+                  window.dispatchEvent(event);
+                }, 100);
+              }}
+              className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors whitespace-nowrap"
+            >
+              立即更新
+            </button>
+          ),
+          duration: 8000, // 显示8秒，给用户足够时间点击
+        });
+      }
+    } catch (error) {
+      console.error('Failed to check for updates:', error);
+      // 静默失败，不显示错误通知给用户
+    } finally {
+      setUpdateCheckDone(true);
+    }
+  }, [updateCheckDone, toast]);
+
   // 初始化加载工具和全局配置
   useEffect(() => {
     loadTools();
     loadGlobalConfig();
   }, [loadTools, loadGlobalConfig]);
+
+  // 应用启动时检查更新（延迟3秒，避免影响启动速度）
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkAppUpdates();
+    }, 3000); // 3秒后检查更新
+
+    return () => clearTimeout(timer);
+  }, [checkAppUpdates]);
 
   // 智能预加载：只要有凭证就立即预加载统计数据
   useEffect(() => {
@@ -162,6 +221,8 @@ function App() {
             globalConfig={globalConfig}
             configLoading={configLoading}
             onConfigChange={loadGlobalConfig}
+            updateInfo={updateInfo}
+            onUpdateCheck={checkAppUpdates}
           />
         )}
       </main>

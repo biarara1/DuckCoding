@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Save } from 'lucide-react';
@@ -9,16 +9,20 @@ import { useTransparentProxy } from './hooks/useTransparentProxy';
 import { BasicSettingsTab } from './components/BasicSettingsTab';
 import { ProxySettingsTab } from './components/ProxySettingsTab';
 import { ExperimentalSettingsTab } from './components/ExperimentalSettingsTab';
-import type { GlobalConfig } from '@/lib/tauri-commands';
+import { UpdateTab } from './components/UpdateTab';
+import type { GlobalConfig, UpdateInfo } from '@/lib/tauri-commands';
 
 interface SettingsPageProps {
   globalConfig: GlobalConfig | null;
   configLoading: boolean;
   onConfigChange: () => void;
+  updateInfo?: UpdateInfo | null;
+  onUpdateCheck?: () => void;
 }
 
-export function SettingsPage({ globalConfig, onConfigChange }: SettingsPageProps) {
+export function SettingsPage({ globalConfig, onConfigChange, updateInfo, onUpdateCheck }: SettingsPageProps) {
   const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState('basic');
 
   // 使用自定义 Hooks
   const {
@@ -70,6 +74,19 @@ export function SettingsPage({ globalConfig, onConfigChange }: SettingsPageProps
       console.error('Failed to load transparent proxy status:', error);
     });
   }, [loadTransparentProxyStatus]);
+
+  // 监听来自App组件的导航到更新tab的事件
+  useEffect(() => {
+    const handleNavigateToUpdateTab = () => {
+      setActiveTab('update');
+    };
+
+    window.addEventListener('navigate-to-update-tab', handleNavigateToUpdateTab);
+
+    return () => {
+      window.removeEventListener('navigate-to-update-tab', handleNavigateToUpdateTab);
+    };
+  }, []);
 
   // 测试代理连接
   const handleTestProxy = async () => {
@@ -150,11 +167,12 @@ export function SettingsPage({ globalConfig, onConfigChange }: SettingsPageProps
         <p className="text-sm text-muted-foreground">配置 DuckCoding 的全局参数和功能</p>
       </div>
 
-      <Tabs defaultValue="basic" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>
           <TabsTrigger value="basic">基本设置</TabsTrigger>
           <TabsTrigger value="proxy">代理设置</TabsTrigger>
           <TabsTrigger value="experimental">实验性功能</TabsTrigger>
+          <TabsTrigger value="update">更新管理</TabsTrigger>
         </TabsList>
 
         {/* 基本设置 */}
@@ -208,28 +226,35 @@ export function SettingsPage({ globalConfig, onConfigChange }: SettingsPageProps
             onStopProxy={handleStopTransparentProxy}
           />
         </TabsContent>
+
+        {/* 更新管理 */}
+        <TabsContent value="update" className="space-y-6">
+          <UpdateTab updateInfo={updateInfo} onUpdateCheck={onUpdateCheck} />
+        </TabsContent>
       </Tabs>
 
-      {/* 保存按钮 */}
-      <div className="flex justify-end mt-6">
-        <Button
-          onClick={handleSaveSettings}
-          disabled={savingSettings}
-          className="shadow-md hover:shadow-lg transition-all"
-        >
-          {savingSettings ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              保存中...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              保存设置
-            </>
-          )}
-        </Button>
-      </div>
+      {/* 保存按钮 - 仅在非更新管理标签页时显示 */}
+      {activeTab !== 'update' && (
+        <div className="flex justify-end mt-6">
+          <Button
+            onClick={handleSaveSettings}
+            disabled={savingSettings}
+            className="shadow-md hover:shadow-lg transition-all"
+          >
+            {savingSettings ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                保存中...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                保存设置
+              </>
+            )}
+          </Button>
+        </div>
+      )}
     </PageContainer>
   );
 }

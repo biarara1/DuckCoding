@@ -16,8 +16,10 @@ use tauri::{
 // 导入服务层
 use duckcoding::{
     services::config::{CodexSettingsPayload, GeminiEnvPayload, GeminiSettingsPayload},
-    ConfigService, InstallMethod, InstallerService, Tool, VersionService,
+    ConfigService, InstallMethod, InstallerService, Tool, UpdateService, VersionService,
+    UpdateInfo, UpdateStatus,
 };
+use duckcoding::models::update::{PlatformInfo, PackageFormatInfo};
 // Use the shared GlobalConfig from the library crate (models::config)
 use duckcoding::GlobalConfig;
 // 导入透明代理服务
@@ -1941,6 +1943,16 @@ fn main() {
             stop_transparent_proxy,
             get_transparent_proxy_status,
             update_transparent_proxy_config,
+            // 更新管理相关命令
+            check_for_app_updates,
+            download_app_update,
+            install_app_update,
+            get_app_update_status,
+            rollback_app_update,
+            get_current_app_version,
+            restart_app_for_update,
+            get_platform_info,
+            get_recommended_package_format,
         ]);
 
     // 使用自定义事件循环处理 macOS Reopen 事件
@@ -2105,4 +2117,89 @@ async fn test_proxy_request(
             error: Some(e.to_string()),
         }),
     }
+}
+
+// ==================== 更新管理相关命令 ====================
+
+// 全局更新服务实例
+static UPDATE_SERVICE: std::sync::OnceLock<std::sync::Arc<UpdateService>> = std::sync::OnceLock::new();
+
+fn get_update_service() -> std::sync::Arc<UpdateService> {
+    UPDATE_SERVICE.get_or_init(|| {
+        let service = UpdateService::new();
+        // 初始化更新服务
+        let service_clone = service.clone();
+        tokio::spawn(async move {
+            if let Err(e) = service_clone.initialize().await {
+                eprintln!("Failed to initialize update service: {}", e);
+            }
+        });
+        std::sync::Arc::new(service)
+    }).clone()
+}
+
+#[tauri::command]
+async fn check_for_app_updates() -> Result<UpdateInfo, String> {
+    let service = get_update_service();
+    service.check_for_updates().await
+        .map_err(|e| format!("Failed to check for updates: {}", e))
+}
+
+#[tauri::command]
+async fn download_app_update(url: String, app: AppHandle) -> Result<String, String> {
+    let service = get_update_service();
+    let window = app.get_webview_window("main")
+        .ok_or("Main window not found")?;
+
+    let _service_clone = service.clone();
+    let window_clone = window.clone();
+
+    service.download_update(&url, move |progress| {
+        let _ = window_clone.emit("update-download-progress", &progress);
+    }).await
+    .map_err(|e| format!("Failed to download update: {}", e))
+}
+
+#[tauri::command]
+async fn install_app_update(update_path: String) -> Result<(), String> {
+    let service = get_update_service();
+    service.install_update(&update_path).await
+        .map_err(|e| format!("Failed to install update: {}", e))
+}
+
+#[tauri::command]
+async fn get_app_update_status() -> Result<UpdateStatus, String> {
+    let service = get_update_service();
+    Ok(service.get_status().await)
+}
+
+#[tauri::command]
+async fn rollback_app_update() -> Result<(), String> {
+    let service = get_update_service();
+    service.rollback_update().await
+        .map_err(|e| format!("Failed to rollback update: {}", e))
+}
+
+#[tauri::command]
+async fn get_current_app_version() -> Result<String, String> {
+    let service = get_update_service();
+    Ok(service.get_current_version().to_string())
+}
+
+#[tauri::command]
+async fn restart_app_for_update(app: AppHandle) -> Result<(), String> {
+    // 立即重启应用
+    app.restart();
+}
+
+#[tauri::command]
+async fn get_platform_info() -> Result<PlatformInfo, String> {
+    let service = get_update_service();
+    Ok(service.get_platform_info())
+}
+
+#[tauri::command]
+async fn get_recommended_package_format() -> Result<PackageFormatInfo, String> {
+    let service = get_update_service();
+    Ok(service.get_recommended_package_format())
 }

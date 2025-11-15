@@ -92,6 +92,39 @@ export interface NodeEnvironment {
   npm_version: string | null;
 }
 
+export interface UpdateInfo {
+  current_version: string;
+  latest_version: string;
+  has_update: boolean;
+  update_url?: string;
+  update?: any;
+  release_notes?: string;
+  file_size?: number;
+  required: boolean;
+}
+
+export interface DownloadProgress {
+  downloaded_bytes: number;
+  total_bytes: number;
+  percentage: number;
+  speed?: number;
+  eta?: number;
+}
+
+export interface PlatformInfo {
+  os: string;
+  arch: string;
+  is_windows: boolean;
+  is_macos: boolean;
+  is_linux: boolean;
+}
+
+export interface PackageFormatInfo {
+  platform: string;
+  preferred_formats: string[];
+  fallback_format: string;
+}
+
 export type CloseAction = 'minimize' | 'quit';
 
 export interface JsonObject {
@@ -321,4 +354,41 @@ export async function updateTransparentProxyConfig(
     newApiKey,
     newBaseUrl,
   });
+}
+
+// 更新管理相关函数
+export async function checkForAppUpdates(): Promise<UpdateInfo> {
+  return await invoke<UpdateInfo>('check_for_app_updates');
+}
+
+export async function downloadAppUpdate(url: string): Promise<string> {
+  return await invoke<string>('download_app_update', { url });
+}
+
+export async function installAppUpdate(updatePath: string): Promise<void> {
+  return await invoke<void>('install_app_update', { updatePath });
+}
+
+export async function getAppUpdateStatus(): Promise<string> {
+  return await invoke<string>('get_app_update_status');
+}
+
+export async function rollbackAppUpdate(): Promise<void> {
+  return await invoke<void>('rollback_app_update');
+}
+
+export async function getCurrentAppVersion(): Promise<string> {
+  return await invoke<string>('get_current_app_version');
+}
+
+export async function restartAppForUpdate(): Promise<void> {
+  return await invoke<void>('restart_app_for_update');
+}
+
+export async function getPlatformInfo(): Promise<PlatformInfo> {
+  return await invoke<PlatformInfo>('get_platform_info');
+}
+
+export async function getRecommendedPackageFormat(): Promise<PackageFormatInfo> {
+  return await invoke<PackageFormatInfo>('get_recommended_package_format');
 }
