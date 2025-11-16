@@ -52,7 +52,6 @@ export function ProxySettingsTab({
   proxyBypassUrls,
   setProxyBypassUrls,
 }: ProxySettingsTabProps) {
-
   // 添加新的过滤规则
   const addBypassRule = () => {
     const newUrls = [...proxyBypassUrls, ''];
@@ -183,12 +182,7 @@ export function ProxySettingsTab({
                   </div>
                 ))}
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={addBypassRule}
-                  className="w-full"
-                >
+                <Button type="button" variant="outline" onClick={addBypassRule} className="w-full">
                   <Plus className="h-4 w-4 mr-2" />
                   添加过滤规则
                 </Button>

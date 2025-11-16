@@ -49,8 +49,7 @@ impl ProxyService {
         }
 
         // 通配符匹配
-        if pattern.starts_with("*.") {
-            let domain = &pattern[2..];
+        if let Some(domain) = pattern.strip_prefix("*.") {
             if host.ends_with(domain) || host == domain {
                 return true;
             }
@@ -126,7 +125,8 @@ impl ProxyService {
             env::set_var("all_proxy", &proxy_url);
 
             // 设置绕过代理的环境变量
-            let bypass_urls: Vec<String> = config.proxy_bypass_urls
+            let bypass_urls: Vec<String> = config
+                .proxy_bypass_urls
                 .iter()
                 .map(|url| url.trim().to_string())
                 .filter(|url| !url.is_empty())
@@ -284,14 +284,14 @@ mod tests {
 
     #[test]
     fn test_should_bypass_proxy_exact_match() {
-        let bypass_list = vec![
-            "localhost".to_string(),
-            "127.0.0.1".to_string(),
-        ];
+        let bypass_list = vec!["localhost".to_string(), "127.0.0.1".to_string()];
 
         assert!(ProxyService::should_bypass_proxy("localhost", &bypass_list));
         assert!(ProxyService::should_bypass_proxy("127.0.0.1", &bypass_list));
-        assert!(!ProxyService::should_bypass_proxy("example.com", &bypass_list));
+        assert!(!ProxyService::should_bypass_proxy(
+            "example.com",
+            &bypass_list
+        ));
     }
 
     #[test]
@@ -302,34 +302,52 @@ mod tests {
             "192.168.*".to_string(),
         ];
 
-        assert!(ProxyService::should_bypass_proxy("test.local", &bypass_list));
+        assert!(ProxyService::should_bypass_proxy(
+            "test.local",
+            &bypass_list
+        ));
         assert!(ProxyService::should_bypass_proxy("home.lan", &bypass_list));
-        assert!(ProxyService::should_bypass_proxy("192.168.1.1", &bypass_list));
-        assert!(ProxyService::should_bypass_proxy("192.168.100.50", &bypass_list));
-        assert!(!ProxyService::should_bypass_proxy("192.167.1.1", &bypass_list));
+        assert!(ProxyService::should_bypass_proxy(
+            "192.168.1.1",
+            &bypass_list
+        ));
+        assert!(ProxyService::should_bypass_proxy(
+            "192.168.100.50",
+            &bypass_list
+        ));
+        assert!(!ProxyService::should_bypass_proxy(
+            "192.167.1.1",
+            &bypass_list
+        ));
         assert!(!ProxyService::should_bypass_proxy("test.com", &bypass_list));
     }
 
     #[test]
     fn test_should_bypass_proxy_with_url() {
-        let bypass_list = vec![
-            "localhost".to_string(),
-            "192.168.*".to_string(),
-        ];
+        let bypass_list = vec!["localhost".to_string(), "192.168.*".to_string()];
 
-        assert!(ProxyService::should_bypass_proxy("http://localhost:3000", &bypass_list));
-        assert!(ProxyService::should_bypass_proxy("https://192.168.1.100/api", &bypass_list));
-        assert!(!ProxyService::should_bypass_proxy("https://example.com", &bypass_list));
+        assert!(ProxyService::should_bypass_proxy(
+            "http://localhost:3000",
+            &bypass_list
+        ));
+        assert!(ProxyService::should_bypass_proxy(
+            "https://192.168.1.100/api",
+            &bypass_list
+        ));
+        assert!(!ProxyService::should_bypass_proxy(
+            "https://example.com",
+            &bypass_list
+        ));
     }
 
     #[test]
     fn test_should_bypass_proxy_case_insensitive() {
-        let bypass_list = vec![
-            "LOCALHOST".to_string(),
-            "Example.Com".to_string(),
-        ];
+        let bypass_list = vec!["LOCALHOST".to_string(), "Example.Com".to_string()];
 
         assert!(ProxyService::should_bypass_proxy("localhost", &bypass_list));
-        assert!(ProxyService::should_bypass_proxy("example.com", &bypass_list));
+        assert!(ProxyService::should_bypass_proxy(
+            "example.com",
+            &bypass_list
+        ));
     }
 }
