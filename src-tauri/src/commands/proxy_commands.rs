@@ -60,6 +60,7 @@ pub async fn start_transparent_proxy(
         .await
         .map_err(|e| format!("读取配置失败: {}", e))?
         .ok_or_else(|| "全局配置不存在，请先配置用户信息".to_string())?;
+    let original_config = config.clone();
 
     if !config.transparent_proxy_enabled {
         return Err("透明代理未启用，请先在设置中启用".to_string());
@@ -85,11 +86,6 @@ pub async fn start_transparent_proxy(
             &local_api_key,
         )
         .map_err(|e| format!("启用透明代理失败: {}", e))?;
-
-        // 保存更新后的全局配置
-        save_global_config(config.clone())
-            .await
-            .map_err(|e| format!("保存配置失败: {}", e))?;
     } else {
         // 已经备份过配置，只需确保当前配置指向本地代理
         TransparentProxyConfigService::update_config_to_proxy(&tool, proxy_port, &local_api_key)
@@ -116,10 +112,25 @@ pub async fn start_transparent_proxy(
     // 启动代理服务
     let service = state.service.lock().await;
     let allow_public = config.transparent_proxy_allow_public;
-    service
-        .start(proxy_config, allow_public)
+    if let Err(start_err) = service.start(proxy_config, allow_public).await {
+        if let Err(disable_err) =
+            TransparentProxyConfigService::disable_transparent_proxy(&tool, &config)
+        {
+            eprintln!(
+                "恢复 ClaudeCode 配置失败（代理启动错误后）: {}",
+                disable_err
+            );
+        }
+        if let Err(save_err) = save_global_config(original_config).await {
+            eprintln!("恢复全局配置失败（代理启动错误后）: {}", save_err);
+        }
+        return Err(format!("启动透明代理服务失败: {}", start_err));
+    }
+
+    // 保存更新后的全局配置
+    save_global_config(config.clone())
         .await
-        .map_err(|e| format!("启动透明代理服务失败: {}", e))?;
+        .map_err(|e| format!("保存配置失败: {}", e))?;
 
     Ok(format!(
         "✅ 透明代理已启动\n监听端口: {}\nClaudeCode 请求将自动转发",
