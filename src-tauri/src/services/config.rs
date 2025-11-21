@@ -9,6 +9,17 @@ use std::path::Path;
 use toml;
 use toml_edit::{DocumentMut, Item, Table};
 
+// Codex provider 配置必需字段
+const CODEX_PROVIDER_REQUIRED_FIELDS: &[&str] =
+    &["name", "base_url", "wire_api", "requires_openai_auth"];
+
+/// 检查 Codex provider 配置是否完整（包含所有必需字段）
+fn is_complete_provider_config(table: &toml_edit::Table) -> bool {
+    CODEX_PROVIDER_REQUIRED_FIELDS
+        .iter()
+        .all(|field| table.contains_key(field))
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct CodexSettingsPayload {
     pub config: Value,
@@ -454,34 +465,49 @@ impl ConfigService {
             serde_json::to_string_pretty(&backup_auth_data)?,
         )?;
 
-        // 对于 config.toml，只保存 base_url（使用简单的 TOML）
+        // 对于 config.toml，只备份当前使用的 provider 的完整配置
         if config_path.exists() {
             let content = fs::read_to_string(&config_path)?;
             if let Ok(doc) = content.parse::<toml_edit::DocumentMut>() {
-                // 提取所有 provider 的 base_url
                 let mut backup_doc = toml_edit::DocumentMut::new();
 
+                // 获取当前使用的 model_provider
+                let current_provider_name = doc
+                    .get("model_provider")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow::anyhow!("配置文件缺少 model_provider 字段"))?;
+
+                // 只备份当前 provider 的完整配置
                 if let Some(providers) = doc.get("model_providers").and_then(|p| p.as_table()) {
-                    let mut backup_providers = toml_edit::Table::new();
-
-                    for (key, provider) in providers.iter() {
-                        if let Some(provider_table) = provider.as_table() {
-                            if let Some(url) = provider_table.get("base_url") {
-                                let mut backup_provider = toml_edit::Table::new();
-                                backup_provider.insert("base_url", url.clone());
-                                backup_providers
-                                    .insert(key, toml_edit::Item::Table(backup_provider));
-                            }
-                        }
+                    if let Some(current_provider) = providers.get(current_provider_name) {
+                        println!(
+                            "📦 备份 Codex 配置：provider = {}, profile = {}",
+                            current_provider_name, profile_name
+                        );
+                        let mut backup_providers = toml_edit::Table::new();
+                        backup_providers.insert(
+                            current_provider_name,
+                            current_provider.clone(),
+                        );
+                        backup_doc.insert(
+                            "model_providers",
+                            toml_edit::Item::Table(backup_providers),
+                        );
+                    } else {
+                        anyhow::bail!(
+                            "未找到 model_provider '{}' 的配置",
+                            current_provider_name
+                        );
                     }
-
-                    backup_doc.insert("model_providers", toml_edit::Item::Table(backup_providers));
+                } else {
+                    anyhow::bail!("配置文件缺少 model_providers 表");
                 }
 
                 // 保存当前的 model_provider 选择
-                if let Some(current_provider) = doc.get("model_provider") {
-                    backup_doc.insert("model_provider", current_provider.clone());
-                }
+                backup_doc.insert(
+                    "model_provider",
+                    toml_edit::value(current_provider_name),
+                );
 
                 fs::write(&backup_config, backup_doc.to_string())?;
             }
@@ -765,7 +791,7 @@ impl ConfigService {
                 toml_edit::DocumentMut::new()
             };
 
-            // 只更新 model_providers 中的 base_url（保留其他字段）
+            // 只更新 model_providers 中的配置（保留其他字段）
             if let Some(backup_providers) =
                 backup_doc.get("model_providers").and_then(|p| p.as_table())
             {
@@ -773,19 +799,45 @@ impl ConfigService {
                     active_doc["model_providers"] = toml_edit::table();
                 }
 
-                for (key, backup_provider) in backup_providers.iter() {
-                    if let Some(backup_provider_table) = backup_provider.as_table() {
-                        if let Some(base_url) = backup_provider_table.get("base_url") {
-                            // 确保 provider 存在
-                            if active_doc["model_providers"][key].is_none() {
-                                active_doc["model_providers"][key] = toml_edit::table();
-                            }
-
-                            // 只更新 base_url
-                            if let Some(active_provider) =
-                                active_doc["model_providers"][key].as_table_mut()
-                            {
-                                active_provider.insert("base_url", base_url.clone());
+                // 获取 model_providers 表的可变引用
+                if let Some(active_providers) = active_doc
+                    .get_mut("model_providers")
+                    .and_then(|p| p.as_table_mut())
+                {
+                    for (key, backup_provider) in backup_providers.iter() {
+                        if let Some(backup_provider_table) = backup_provider.as_table() {
+                            if backup_provider_table.get("base_url").is_some() {
+                                // 如果 provider 不存在，需要创建
+                                if !active_providers.contains_key(key) {
+                                    // 检查备份文件格式：新格式包含完整字段，旧格式只有 base_url
+                                    if is_complete_provider_config(backup_provider_table) {
+                                        // 新格式：完整配置，直接复制
+                                        active_providers.insert(key, backup_provider.clone());
+                                    } else {
+                                        // 旧格式：只有 base_url，需要补全必要字段（向后兼容）
+                                        let mut new_provider = toml_edit::Table::new();
+                                        new_provider.insert("name", toml_edit::value(key));
+                                        new_provider.insert(
+                                            "base_url",
+                                            backup_provider_table.get("base_url").unwrap().clone(),
+                                        );
+                                        new_provider
+                                            .insert("wire_api", toml_edit::value("responses"));
+                                        new_provider
+                                            .insert("requires_openai_auth", toml_edit::value(true));
+                                        active_providers
+                                            .insert(key, toml_edit::Item::Table(new_provider));
+                                    }
+                                } else {
+                                    // 如果已存在，只更新 base_url（保留用户自定义配置）
+                                    if let Some(active_provider) =
+                                        active_providers.get_mut(key).and_then(|p| p.as_table_mut())
+                                    {
+                                        if let Some(base_url) = backup_provider_table.get("base_url") {
+                                            active_provider.insert("base_url", base_url.clone());
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

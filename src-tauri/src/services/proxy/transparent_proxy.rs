@@ -100,7 +100,7 @@ impl TransparentProxyService {
 
         let listener = TcpListener::bind(addr).await.context("绑定代理端口失败")?;
 
-        println!("🚀 透明代理启动成功: http://{addr}");
+        println!("🚀 透明代理启动成功: http://{}", addr);
 
         let config_clone = Arc::clone(&self.config);
         let port = self.port; // 保存端口信息
@@ -121,12 +121,12 @@ impl TransparentProxyService {
                             if let Err(err) =
                                 http1::Builder::new().serve_connection(io, service).await
                             {
-                                eprintln!("❌ 处理连接失败 {addr}: {err:?}");
+                                eprintln!("❌ 处理连接失败 {}: {:?}", addr, err);
                             }
                         });
                     }
                     Err(e) => {
-                        eprintln!("❌ 接受连接失败: {e:?}");
+                        eprintln!("❌ 接受连接失败: {:?}", e);
                     }
                 }
             }
@@ -186,11 +186,12 @@ async fn handle_request(
     match handle_request_inner(req, config, own_port).await {
         Ok(res) => Ok(res),
         Err(e) => {
-            eprintln!("❌ 请求处理失败: {e:?}");
+            eprintln!("❌ 请求处理失败: {:?}", e);
             Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
                 .body(box_body(http_body_util::Full::new(Bytes::from(format!(
-                    "代理错误: {e}"
+                    "代理错误: {}",
+                    e
                 )))))
                 .unwrap())
         }
@@ -268,26 +269,36 @@ async fn handle_request_inner(
     let query = req
         .uri()
         .query()
-        .map(|q| format!("?{q}"))
+        .map(|q| format!("?{}", q))
         .unwrap_or_default();
 
     // 确保 base_url 不包含尾部斜杠
     let base = proxy_config.target_base_url.trim_end_matches('/');
-    let target_url = format!("{base}{path}{query}");
+
+    // 如果 base_url 以 /v1 结尾，且 path 以 /v1 开头，则去掉 path 中的 /v1
+    // 这是因为 Codex 的配置文件要求 base_url 包含 /v1，
+    // 但 Codex 发送请求时也会带上 /v1 前缀
+    let adjusted_path = if base.ends_with("/v1") && path.starts_with("/v1") {
+        &path[3..] // 去掉 "/v1"
+    } else {
+        path
+    };
+
+    let target_url = format!("{}{}{}", base, adjusted_path, query);
 
     // 回环检测 - 只检测自己的端口
-    let own_proxy_url1 = format!("http://127.0.0.1:{own_port}");
-    let own_proxy_url2 = format!("https://127.0.0.1:{own_port}");
-    let own_proxy_url3 = format!("http://localhost:{own_port}");
-    let own_proxy_url4 = format!("https://localhost:{own_port}");
+    let own_proxy_url1 = format!("http://127.0.0.1:{}", own_port);
+    let own_proxy_url2 = format!("https://127.0.0.1:{}", own_port);
+    let own_proxy_url3 = format!("http://localhost:{}", own_port);
+    let own_proxy_url4 = format!("https://localhost:{}", own_port);
 
     if target_url.starts_with(&own_proxy_url1)
         || target_url.starts_with(&own_proxy_url2)
         || target_url.starts_with(&own_proxy_url3)
         || target_url.starts_with(&own_proxy_url4)
     {
-        eprintln!("❌ 检测到透明代理回环: {target_url}");
-        eprintln!("   代理端口: {own_port}");
+        eprintln!("❌ 检测到透明代理回环: {}", target_url);
+        eprintln!("   代理端口: {}", own_port);
         return Ok(Response::builder()
             .status(StatusCode::BAD_GATEWAY)
             .header("content-type", "application/json")
@@ -301,7 +312,7 @@ async fn handle_request_inner(
     }
 
     println!("🔄 代理请求: {} {} -> {}", req.method(), path, target_url);
-    println!("   Base URL: {base}");
+    println!("   Base URL: {}", base);
     println!(
         "   Target API Key: {}***",
         &proxy_config.target_api_key[..4.min(proxy_config.target_api_key.len())]
