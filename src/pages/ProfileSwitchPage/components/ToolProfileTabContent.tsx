@@ -37,8 +37,8 @@ export function ToolProfileTabContent({
   return (
     <Card className="shadow-sm border">
       <CardContent className="pt-6">
-        {/* 显示当前生效的配置 */}
-        {activeConfig && (
+        {/* 显示当前生效的配置（透明代理启用时隐藏） */}
+        {!transparentProxyEnabled && activeConfig && (
           <ActiveConfigCard
             toolId={tool.id}
             activeConfig={activeConfig}
@@ -62,6 +62,8 @@ export function ToolProfileTabContent({
                       toolId={tool.id}
                       switching={switching}
                       deleting={deletingProfiles[`${tool.id}-${profile}`] || false}
+                      disabled={transparentProxyEnabled}
+                      disabledReason="透明代理已启用，配置切换已禁用"
                       onSwitch={onSwitch}
                       onDelete={onDelete}
                     />

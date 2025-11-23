@@ -16,6 +16,7 @@ import {
   CodexConfigManager,
   GeminiConfigManager,
 } from '@/components/ToolConfigManager';
+import { saveGlobalConfig } from '@/lib/tauri-commands';
 import type { ToolStatus } from '@/lib/tauri-commands';
 
 interface ProfileSwitchPageProps {
@@ -37,6 +38,8 @@ export function ProfileSwitchPage({
     toolId: string;
     profile: string;
   }>({ open: false, toolId: '', profile: '' });
+  const [hideProxyTip, setHideProxyTip] = useState(false); // 临时关闭推荐提示
+  const [neverShowProxyTip, setNeverShowProxyTip] = useState(false); // 永久隐藏推荐提示
 
   // 使用拖拽排序Hook
   const { sensors, applySavedOrder, createDragEndHandler } = useProfileSorting();
@@ -54,11 +57,8 @@ export function ProfileSwitchPage({
     loadAllProfiles,
     handleSwitchProfile,
     handleDeleteProfile,
-    handleStartToolProxy,
-    handleStopToolProxy,
     isToolProxyEnabled,
     isToolProxyRunning,
-    isToolLoading,
   } = useProfileManagement(tools, applySavedOrder);
 
   // 同步外部 tools 数据
@@ -72,6 +72,13 @@ export function ProfileSwitchPage({
     loadGlobalConfig();
     loadAllProxyStatus();
   }, [loadGlobalConfig, loadAllProxyStatus]);
+
+  // 从全局配置读取永久隐藏状态
+  useEffect(() => {
+    if (globalConfig?.hide_transparent_proxy_tip) {
+      setNeverShowProxyTip(true);
+    }
+  }, [globalConfig]);
 
   // 当工具加载完成后，加载配置
   useEffect(() => {
@@ -127,24 +134,41 @@ export function ProfileSwitchPage({
     });
   };
 
-  // 启动透明代理处理
-  const onStartToolProxy = async (toolId: string) => {
-    const result = await handleStartToolProxy(toolId);
-    toast({
-      title: result.success ? '启动成功' : '启动失败',
-      description: result.message,
-      variant: result.success ? 'default' : 'destructive',
-    });
+  // 临时关闭推荐提示
+  const handleCloseProxyTip = () => {
+    setHideProxyTip(true);
   };
 
-  // 停止透明代理处理
-  const onStopToolProxy = async (toolId: string) => {
-    const result = await handleStopToolProxy(toolId);
-    toast({
-      title: result.success ? '停止成功' : '停止失败',
-      description: result.message,
-      variant: result.success ? 'default' : 'destructive',
-    });
+  // 永久隐藏推荐提示
+  const handleNeverShowProxyTip = async () => {
+    if (!globalConfig) return;
+
+    try {
+      await saveGlobalConfig({
+        ...globalConfig,
+        hide_transparent_proxy_tip: true,
+      });
+      setNeverShowProxyTip(true);
+      toast({
+        title: '设置已保存',
+        description: '透明代理推荐提示已永久隐藏',
+      });
+    } catch (error) {
+      toast({
+        title: '保存失败',
+        description: String(error),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // 跳转到透明代理页并选中工具
+  const navigateToProxyPage = (toolId: string) => {
+    window.dispatchEvent(
+      new CustomEvent('navigate-to-transparent-proxy', {
+        detail: { toolId },
+      }),
+    );
   };
 
   // 切换到安装页面
@@ -152,17 +176,11 @@ export function ProfileSwitchPage({
     window.dispatchEvent(new CustomEvent('navigate-to-install'));
   };
 
-  // 切换到设置页面
-  const switchToSettings = () => {
-    window.dispatchEvent(new CustomEvent('navigate-to-settings'));
-  };
-
   const installedTools = tools.filter((t) => t.installed);
 
   // 获取当前选中工具的代理状态
   const currentToolProxyEnabled = isToolProxyEnabled(selectedSwitchTab);
   const currentToolProxyRunning = isToolProxyRunning(selectedSwitchTab);
-  const currentToolLoading = isToolLoading(selectedSwitchTab);
 
   // 获取当前选中工具的名称
   const getCurrentToolName = () => {
@@ -191,11 +209,10 @@ export function ProfileSwitchPage({
               toolName={getCurrentToolName()}
               isEnabled={currentToolProxyEnabled}
               isRunning={currentToolProxyRunning}
-              startingProxy={currentToolLoading && !currentToolProxyRunning}
-              stoppingProxy={currentToolLoading && currentToolProxyRunning}
-              onStartProxy={() => onStartToolProxy(selectedSwitchTab)}
-              onStopProxy={() => onStopToolProxy(selectedSwitchTab)}
-              onNavigateToSettings={switchToSettings}
+              hidden={neverShowProxyTip || hideProxyTip}
+              onNavigateToProxy={() => navigateToProxyPage(selectedSwitchTab)}
+              onClose={handleCloseProxyTip}
+              onNeverShow={handleNeverShowProxyTip}
             />
           )}
 

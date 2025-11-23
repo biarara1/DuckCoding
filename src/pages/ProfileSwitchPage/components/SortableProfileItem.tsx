@@ -8,6 +8,8 @@ interface SortableProfileItemProps {
   toolId: string;
   switching: boolean;
   deleting: boolean;
+  disabled?: boolean; // 外部禁用状态（如透明代理已启用）
+  disabledReason?: string; // 禁用原因提示
   onSwitch: (toolId: string, profile: string) => void;
   onDelete: (toolId: string, profile: string) => void;
 }
@@ -17,6 +19,8 @@ export function SortableProfileItem({
   toolId,
   switching,
   deleting,
+  disabled,
+  disabledReason,
   onSwitch,
   onDelete,
 }: SortableProfileItemProps) {
@@ -52,7 +56,8 @@ export function SortableProfileItem({
           size="sm"
           variant="outline"
           onClick={() => onSwitch(toolId, profile)}
-          disabled={switching || deleting}
+          disabled={switching || deleting || disabled}
+          title={disabled ? disabledReason : undefined}
           className="shadow-sm hover:shadow-md transition-all"
         >
           {switching ? (
