@@ -40,6 +40,7 @@ type TabType =
 function App() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [selectedProxyToolId, setSelectedProxyToolId] = useState<string | undefined>(undefined);
 
   // 全局工具状态缓存
   const [tools, setTools] = useState<ToolStatus[]>([]);
@@ -252,7 +253,12 @@ function App() {
     },
     onNavigateToInstall: () => setActiveTab('install'),
     onNavigateToSettings: () => setActiveTab('settings'),
-    onNavigateToTransparentProxy: () => setActiveTab('transparent-proxy'),
+    onNavigateToTransparentProxy: (detail) => {
+      setActiveTab('transparent-proxy');
+      if (detail?.toolId) {
+        setSelectedProxyToolId(detail.toolId);
+      }
+    },
     onRefreshTools: loadTools,
     executeCloseAction,
   });
@@ -279,7 +285,9 @@ function App() {
             onLoadStatistics={loadStatistics}
           />
         )}
-        {activeTab === 'transparent-proxy' && <TransparentProxyPage />}
+        {activeTab === 'transparent-proxy' && (
+          <TransparentProxyPage selectedToolId={selectedProxyToolId} />
+        )}
         {activeTab === 'settings' && (
           <SettingsPage
             globalConfig={globalConfig}

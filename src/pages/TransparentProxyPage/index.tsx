@@ -1,7 +1,7 @@
 // 透明代理管理页面
 // 提供三工具透明代理的统一管理界面
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { PageContainer } from '@/components/layout/PageContainer';
@@ -20,6 +20,10 @@ const SUPPORTED_TOOLS: ToolMetadata[] = [
   { id: 'gemini-cli', name: 'Gemini CLI', icon: logoMap['gemini-cli'] },
 ];
 
+interface TransparentProxyPageProps {
+  selectedToolId?: string; // 从外部传入的默认选中工具 ID
+}
+
 /**
  * 透明代理管理页面
  *
@@ -34,9 +38,21 @@ const SUPPORTED_TOOLS: ToolMetadata[] = [
  * - 单一职责：每个组件负责特定功能
  * - 开放封闭：新增工具只需扩展工厂，无需修改主逻辑
  */
-export function TransparentProxyPage() {
+export function TransparentProxyPage({ selectedToolId: initialToolId }: TransparentProxyPageProps) {
   const { toast } = useToast();
   const [selectedToolId, setSelectedToolId] = useState<ToolId>('claude-code');
+
+  // 当外部传入 toolId 时，更新选中状态
+  useEffect(() => {
+    if (
+      initialToolId &&
+      (initialToolId === 'claude-code' ||
+        initialToolId === 'codex' ||
+        initialToolId === 'gemini-cli')
+    ) {
+      setSelectedToolId(initialToolId as ToolId);
+    }
+  }, [initialToolId]);
 
   // 使用数据管理 Hook
   const { getToolData, configLoading, refreshData, saveToolConfig } = useToolProxyData();
