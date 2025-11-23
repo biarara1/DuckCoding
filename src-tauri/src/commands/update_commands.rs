@@ -19,7 +19,7 @@ impl UpdateServiceState {
         let service_clone = service.clone();
         tauri::async_runtime::spawn(async move {
             if let Err(e) = service_clone.initialize().await {
-                eprintln!("Failed to initialize update service: {e}");
+                tracing::error!(error = ?e, "更新服务初始化失败");
             }
         });
         Self { service }

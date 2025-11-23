@@ -94,7 +94,7 @@ impl ProxyManager {
                 .await
                 .context(format!("停止 {} 代理失败", tool_id))?;
         } else {
-            println!("⚠️  {} 代理未运行或不存在", tool_id);
+            tracing::warn!(tool_id = %tool_id, "代理未运行或不存在");
         }
 
         Ok(())
@@ -108,7 +108,11 @@ impl ProxyManager {
         for tool_id in tool_ids {
             if let Some(instance) = instances.remove(&tool_id) {
                 if let Err(e) = instance.stop().await {
-                    eprintln!("⚠️  停止 {} 代理失败: {}", tool_id, e);
+                    tracing::error!(
+                        tool_id = %tool_id,
+                        error = ?e,
+                        "停止代理失败"
+                    );
                 }
             }
         }

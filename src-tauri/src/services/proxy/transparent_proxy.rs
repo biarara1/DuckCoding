@@ -54,26 +54,26 @@ impl TransparentProxyService {
 
         // 验证配置有效性 - 允许空配置，但会在运行时检查
         if config.target_api_key.is_empty() {
-            println!("⚠️ 警告：透明代理启动时缺少API Key配置，将在运行时拦截请求");
+            tracing::warn!("透明代理启动时缺少 API Key 配置，将在运行时拦截请求");
         }
 
         if config.target_base_url.is_empty() {
-            println!("⚠️ 警告：透明代理启动时缺少Base URL配置，将在运行时拦截请求");
+            tracing::warn!("透明代理启动时缺少 Base URL 配置，将在运行时拦截请求");
         }
 
-        println!("✅ 透明代理配置加载完成");
+        tracing::debug!("透明代理配置加载完成");
         if !config.target_api_key.is_empty() {
-            println!(
-                "   目标 API Key: {}***",
-                &config.target_api_key[..4.min(config.target_api_key.len())]
+            tracing::debug!(
+                api_key_prefix = &config.target_api_key[..4.min(config.target_api_key.len())],
+                "目标 API Key"
             );
         } else {
-            println!("   目标 API Key: [未配置]");
+            tracing::debug!("目标 API Key: 未配置");
         }
         if !config.target_base_url.is_empty() {
-            println!("   目标 Base URL: {}", config.target_base_url);
+            tracing::debug!(base_url = %config.target_base_url, "目标 Base URL");
         } else {
-            println!("   目标 Base URL: [未配置]");
+            tracing::debug!("目标 Base URL: 未配置");
         }
 
         // 保存配置
@@ -89,18 +89,14 @@ impl TransparentProxyService {
             SocketAddr::from(([127, 0, 0, 1], self.port))
         };
 
-        println!(
-            "🌐 绑定模式: {}",
-            if allow_public {
-                "允许局域网访问 (0.0.0.0)"
-            } else {
-                "仅本地访问 (127.0.0.1)"
-            }
+        tracing::info!(
+            bind_mode = if allow_public { "0.0.0.0" } else { "127.0.0.1" },
+            "透明代理绑定模式"
         );
 
         let listener = TcpListener::bind(addr).await.context("绑定代理端口失败")?;
 
-        println!("🚀 透明代理启动成功: http://{}", addr);
+        tracing::info!(addr = %addr, "透明代理启动成功");
 
         let config_clone = Arc::clone(&self.config);
         let port = self.port; // 保存端口信息
@@ -121,12 +117,16 @@ impl TransparentProxyService {
                             if let Err(err) =
                                 http1::Builder::new().serve_connection(io, service).await
                             {
-                                eprintln!("❌ 处理连接失败 {}: {:?}", addr, err);
+                                tracing::error!(
+                                    client_addr = %addr,
+                                    error = ?err,
+                                    "处理连接失败"
+                                );
                             }
                         });
                     }
                     Err(e) => {
-                        eprintln!("❌ 接受连接失败: {:?}", e);
+                        tracing::error!(error = ?e, "接受连接失败");
                     }
                 }
             }
@@ -150,7 +150,7 @@ impl TransparentProxyService {
 
         if let Some(handle) = handle {
             handle.abort();
-            println!("🛑 透明代理已停止");
+            tracing::info!("透明代理已停止");
         }
 
         // 清空配置
@@ -172,7 +172,7 @@ impl TransparentProxyService {
     pub async fn update_config(&self, config: ProxyConfig) -> Result<()> {
         let mut cfg = self.config.write().await;
         *cfg = Some(config);
-        println!("✅ 透明代理配置已更新");
+        tracing::info!("透明代理配置已更新");
         Ok(())
     }
 }
@@ -186,7 +186,7 @@ async fn handle_request(
     match handle_request_inner(req, config, own_port).await {
         Ok(res) => Ok(res),
         Err(e) => {
-            eprintln!("❌ 请求处理失败: {:?}", e);
+            tracing::error!(error = ?e, "请求处理失败");
             Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
                 .body(box_body(http_body_util::Full::new(Bytes::from(format!(
@@ -297,8 +297,11 @@ async fn handle_request_inner(
         || target_url.starts_with(&own_proxy_url3)
         || target_url.starts_with(&own_proxy_url4)
     {
-        eprintln!("❌ 检测到透明代理回环: {}", target_url);
-        eprintln!("   代理端口: {}", own_port);
+        tracing::error!(
+            target_url = %target_url,
+            proxy_port = own_port,
+            "检测到透明代理回环"
+        );
         return Ok(Response::builder()
             .status(StatusCode::BAD_GATEWAY)
             .header("content-type", "application/json")
@@ -311,16 +314,18 @@ async fn handle_request_inner(
             .unwrap());
     }
 
-    println!("🔄 代理请求: {} {} -> {}", req.method(), path, target_url);
-    println!("   Base URL: {}", base);
-    println!(
-        "   Target API Key: {}***",
-        &proxy_config.target_api_key[..4.min(proxy_config.target_api_key.len())]
-    );
-
     // 先获取 headers 和 method
     let method = req.method().clone();
     let headers = req.headers().clone();
+
+    tracing::debug!(
+        method = %method,
+        path = %path,
+        target_url = %target_url,
+        base_url = %base,
+        api_key_prefix = &proxy_config.target_api_key[..4.min(proxy_config.target_api_key.len())],
+        "代理请求"
+    );
 
     // 读取请求体（会消费 req）
     let body_bytes = if method != Method::GET && method != Method::HEAD {
@@ -387,7 +392,7 @@ async fn handle_request_inner(
     }
 
     if is_sse {
-        println!("📡 SSE 流式响应");
+        tracing::debug!("SSE 流式响应");
         // SSE 流式响应 - 使用 bytes_stream
         use futures_util::StreamExt;
 

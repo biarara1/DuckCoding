@@ -106,7 +106,7 @@ impl VersionService {
                 });
             }
             Err(e) => {
-                eprintln!("⚠️  镜像站 API 不可用: {e}");
+                tracing::warn!(error = ?e, "镜像站 API 不可用");
             }
         }
 
@@ -200,19 +200,19 @@ impl VersionService {
     /// 批量从镜像站获取所有工具版本（优化：一次请求）
     async fn get_all_from_mirror(&self) -> Result<MirrorApiResponse> {
         #[cfg(debug_assertions)]
-        println!("🔍 正在请求镜像站 API: {}", &self.mirror_api_url);
+        tracing::debug!(api_url = %self.mirror_api_url, "请求镜像站 API");
 
         // 统一通过带代理的 Client 进行请求
         let client = crate::http_client::build_client().map_err(|e| anyhow::anyhow!(e))?;
         let response = client.get(&self.mirror_api_url).send().await?;
 
         #[cfg(debug_assertions)]
-        println!("✅ 收到响应，状态码: {}", response.status());
+        tracing::debug!(status = %response.status(), "收到镜像站响应");
 
         let json_response = response.json::<MirrorApiResponse>().await?;
 
         #[cfg(debug_assertions)]
-        println!("✅ 成功解析 JSON，工具数量: {}", json_response.tools.len());
+        tracing::debug!(tool_count = json_response.tools.len(), "成功解析 JSON");
 
         Ok(json_response)
     }
@@ -223,13 +223,13 @@ impl VersionService {
         let mut results = Vec::new();
 
         #[cfg(debug_assertions)]
-        println!("📦 开始批量检查 {} 个工具", tools.len());
+        tracing::debug!(tool_count = tools.len(), "开始批量检查工具");
 
         // 1. 尝试一次性从镜像站获取所有工具版本
         match self.get_all_from_mirror().await {
             Ok(mirror_data) => {
                 #[cfg(debug_assertions)]
-                println!("✅ 镜像站数据获取成功");
+                tracing::debug!("镜像站数据获取成功");
 
                 // 成功获取镜像站数据，为每个工具构建 VersionInfo
                 for tool in &tools {
@@ -251,9 +251,15 @@ impl VersionService {
                         let mirror_is_stale = mirror_tool.is_stale.unwrap_or(false);
 
                         #[cfg(debug_assertions)]
-                        println!("  {} - 已安装: {:?}, 官方最新: {}, 镜像版本: {:?}, 镜像滞后: {}, 有更新: {}",
-                            tool.id, installed_version, mirror_tool.latest_version,
-                            mirror_tool.mirror_version, mirror_is_stale, has_update);
+                        tracing::debug!(
+                            tool_id = %tool.id,
+                            installed_version = ?installed_version,
+                            latest_version = %mirror_tool.latest_version,
+                            mirror_version = ?mirror_tool.mirror_version,
+                            mirror_is_stale = mirror_is_stale,
+                            has_update = has_update,
+                            "工具版本检查"
+                        );
 
                         results.push(VersionInfo {
                             tool_id: tool.id.clone(),
@@ -274,7 +280,7 @@ impl VersionService {
             }
             Err(e) => {
                 // 镜像站不可用，逐个回退到本地检查（跳过镜像重试）
-                eprintln!("⚠️  镜像站 API 不可用，回退到本地检查: {e}");
+                tracing::warn!(error = ?e, "镜像站 API 不可用，回退到本地检查");
                 for tool in &tools {
                     let installed_version = self.installer.get_installed_version(tool).await;
                     if let Ok(info) = self.check_version_local(tool, installed_version).await {
@@ -285,7 +291,7 @@ impl VersionService {
         }
 
         #[cfg(debug_assertions)]
-        println!("📊 批量检查完成，返回 {} 个结果", results.len());
+        tracing::debug!(result_count = results.len(), "批量检查完成");
 
         results
     }

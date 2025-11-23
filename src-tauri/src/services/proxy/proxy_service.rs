@@ -136,10 +136,10 @@ impl ProxyService {
                 let no_proxy = bypass_urls.join(",");
                 env::set_var("NO_PROXY", &no_proxy);
                 env::set_var("no_proxy", &no_proxy);
-                println!("Proxy bypass list: {no_proxy}");
+                tracing::debug!(no_proxy = %no_proxy, "代理绕过列表");
             }
 
-            println!("Proxy enabled: {proxy_url}");
+            tracing::info!(proxy_url = %proxy_url, "代理已启用");
         }
     }
 

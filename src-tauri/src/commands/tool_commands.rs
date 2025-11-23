@@ -102,7 +102,7 @@ pub async fn install_tool(
 
     let force = force.unwrap_or(false);
     #[cfg(debug_assertions)]
-    println!("Installing {tool} via {method} (using InstallerService, force={force})");
+    tracing::debug!(tool = %tool, method = %method, force = force, "安装工具（使用InstallerService）");
 
     // 获取工具定义
     let tool_obj =
@@ -152,7 +152,7 @@ pub async fn check_update(tool: String) -> Result<UpdateResult, String> {
     apply_proxy_if_configured();
 
     #[cfg(debug_assertions)]
-    println!("Checking updates for {tool} (using VersionService)");
+    tracing::debug!(tool = %tool, "检查更新（使用VersionService）");
 
     let tool_obj = Tool::by_id(&tool).ok_or_else(|| format!("未知工具: {tool}"))?;
 
@@ -192,7 +192,7 @@ pub async fn check_all_updates() -> Result<Vec<UpdateResult>, String> {
     apply_proxy_if_configured();
 
     #[cfg(debug_assertions)]
-    println!("Checking updates for all tools (batch mode)");
+    tracing::debug!("批量检查所有工具更新");
 
     let version_service = VersionService::new();
     let version_infos = version_service.check_all_tools().await;
@@ -226,7 +226,7 @@ pub async fn update_tool(
 
     let force = force.unwrap_or(false);
     #[cfg(debug_assertions)]
-    println!("Updating {tool} (using InstallerService, force={force})");
+    tracing::debug!(tool = %tool, force = force, "更新工具（使用InstallerService）");
 
     // 获取工具定义
     let tool_obj =

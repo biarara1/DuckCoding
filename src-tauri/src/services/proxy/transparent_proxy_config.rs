@@ -48,7 +48,10 @@ impl TransparentProxyConfigService {
         // 3. 修改工具配置指向本地代理
         Self::write_proxy_config(tool, local_proxy_port, local_proxy_key)?;
 
-        println!("✅ {} 透明代理已启用，配置已指向本地代理", tool.id);
+        tracing::info!(
+            tool_id = %tool.id,
+            "透明代理已启用，配置已指向本地代理"
+        );
 
         Ok(())
     }
@@ -92,7 +95,10 @@ impl TransparentProxyConfigService {
             real_model_provider.as_deref(),
         )?;
 
-        println!("✅ {} 透明代理已禁用，配置已恢复", tool.id);
+        tracing::info!(
+            tool_id = %tool.id,
+            "透明代理已禁用，配置已恢复"
+        );
 
         Ok(())
     }
@@ -116,7 +122,10 @@ impl TransparentProxyConfigService {
             global_config.transparent_proxy_real_base_url = Some(new_base_url.to_string());
         }
 
-        println!("✅ {} 透明代理真实配置已更新", tool.id);
+        tracing::info!(
+            tool_id = %tool.id,
+            "透明代理真实配置已更新"
+        );
 
         Ok(())
     }
@@ -128,7 +137,10 @@ impl TransparentProxyConfigService {
         local_proxy_key: &str,
     ) -> Result<()> {
         Self::write_proxy_config(tool, local_proxy_port, local_proxy_key)?;
-        println!("✅ {} 配置已更新指向本地代理", tool.id);
+        tracing::info!(
+            tool_id = %tool.id,
+            "配置已更新指向本地代理"
+        );
         Ok(())
     }
 

@@ -62,9 +62,9 @@ impl ProxyInstance {
 
         // 验证配置
         if config.real_api_key.is_none() || config.real_base_url.is_none() {
-            println!(
-                "⚠️  警告：{} 代理启动时缺少配置，将在运行时拦截请求",
-                self.tool_id
+            tracing::warn!(
+                tool_id = %self.tool_id,
+                "代理启动时缺少配置，将在运行时拦截请求"
             );
         }
 
@@ -79,14 +79,11 @@ impl ProxyInstance {
             .await
             .context(format!("绑定端口 {} 失败", config.port))?;
 
-        println!("🚀 {} 透明代理启动: http://{}", self.tool_id, addr);
-        println!(
-            "   绑定模式: {}",
-            if config.allow_public {
-                "允许局域网访问 (0.0.0.0)"
-            } else {
-                "仅本地访问 (127.0.0.1)"
-            }
+        tracing::info!(
+            tool_id = %self.tool_id,
+            addr = %addr,
+            bind_mode = if config.allow_public { "0.0.0.0" } else { "127.0.0.1" },
+            "透明代理启动成功"
         );
 
         let config_clone = Arc::clone(&self.config);
@@ -118,12 +115,20 @@ impl ProxyInstance {
                             if let Err(err) =
                                 http1::Builder::new().serve_connection(io, service).await
                             {
-                                eprintln!("❌ {} 处理连接失败: {:?}", tool_id_for_error, err);
+                                tracing::error!(
+                                    tool_id = %tool_id_for_error,
+                                    error = ?err,
+                                    "处理连接失败"
+                                );
                             }
                         });
                     }
                     Err(e) => {
-                        eprintln!("❌ {} 接受连接失败: {:?}", tool_id, e);
+                        tracing::error!(
+                            tool_id = %tool_id,
+                            error = ?e,
+                            "接受连接失败"
+                        );
                     }
                 }
             }
@@ -147,7 +152,7 @@ impl ProxyInstance {
 
         if let Some(handle) = handle {
             handle.abort();
-            println!("🛑 {} 透明代理已停止", self.tool_id);
+            tracing::info!(tool_id = %self.tool_id, "透明代理已停止");
         }
 
         Ok(())
@@ -170,7 +175,7 @@ impl ProxyInstance {
     pub async fn update_config(&self, new_config: ToolProxyConfig) -> Result<()> {
         let mut config = self.config.write().await;
         *config = new_config;
-        println!("✅ {} 透明代理配置已更新", self.tool_id);
+        tracing::info!(tool_id = %self.tool_id, "透明代理配置已更新");
         Ok(())
     }
 }
@@ -186,7 +191,11 @@ async fn handle_request(
     match handle_request_inner(req, config, processor, own_port, tool_id).await {
         Ok(res) => Ok(res),
         Err(e) => {
-            eprintln!("❌ {} 请求处理失败: {:?}", tool_id, e);
+            tracing::error!(
+                tool_id = %tool_id,
+                error = ?e,
+                "请求处理失败"
+            );
             Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
                 .body(box_body(http_body_util::Full::new(Bytes::from(format!(
@@ -309,9 +318,12 @@ async fn handle_request_inner(
         }
     }
 
-    println!(
-        "🔄 {} 代理请求: {} {} -> {}",
-        tool_id, method, &path, processed.target_url
+    tracing::debug!(
+        tool_id = %tool_id,
+        method = %method,
+        path = %path,
+        target_url = %processed.target_url,
+        "代理请求"
     );
 
     // 构建上游请求（使用处理后的信息）
@@ -350,7 +362,7 @@ async fn handle_request_inner(
     }
 
     if is_sse {
-        println!("📡 {} SSE 流式响应", tool_id);
+        tracing::debug!(tool_id = %tool_id, "SSE 流式响应");
         use futures_util::StreamExt;
 
         let stream = upstream_res.bytes_stream();

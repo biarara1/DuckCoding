@@ -64,16 +64,16 @@ pub use ui::{
 pub async fn auto_start_proxies(manager: &ProxyManager) {
     use utils::config::read_global_config;
 
-    println!("🚀 检查透明代理自启动配置...");
+    tracing::info!("检查透明代理自启动配置");
 
     let config = match read_global_config() {
         Ok(Some(cfg)) => cfg,
         Ok(None) => {
-            println!("ℹ️ 未找到全局配置，跳过自启动");
+            tracing::debug!("未找到全局配置，跳过自启动");
             return;
         }
         Err(e) => {
-            eprintln!("❌ 读取配置失败: {}", e);
+            tracing::error!(error = ?e, "读取配置失败");
             return;
         }
     };
@@ -89,33 +89,39 @@ pub async fn auto_start_proxies(manager: &ProxyManager) {
 
         // 检查是否有保护密钥
         if tool_config.local_api_key.is_none() {
-            println!("⚠️ {} 未配置保护密钥，跳过自启动", tool_id);
+            tracing::warn!(tool_id = %tool_id, "未配置保护密钥，跳过自启动");
             continue;
         }
 
-        println!(
-            "🔄 正在自动启动 {} 代理 (端口 {})...",
-            tool_id, tool_config.port
+        tracing::info!(
+            tool_id = %tool_id,
+            port = tool_config.port,
+            "自动启动代理"
         );
 
         match manager.start_proxy(tool_id, tool_config.clone()).await {
             Ok(_) => {
-                println!("✅ {} 代理已自动启动", tool_id);
                 started_count += 1;
+                tracing::info!(tool_id = %tool_id, "代理启动成功");
             }
             Err(e) => {
-                eprintln!("❌ {} 代理自启动失败: {}", tool_id, e);
                 failed_count += 1;
+                tracing::error!(
+                    tool_id = %tool_id,
+                    error = ?e,
+                    "代理启动失败"
+                );
             }
         }
     }
 
     if started_count > 0 || failed_count > 0 {
-        println!(
-            "📊 自启动完成：成功 {} 个，失败 {} 个",
-            started_count, failed_count
+        tracing::info!(
+            started = started_count,
+            failed = failed_count,
+            "自启动代理完成"
         );
     } else {
-        println!("ℹ️ 没有配置自启动的代理");
+        tracing::debug!("没有配置自启动的代理");
     }
 }

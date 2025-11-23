@@ -191,7 +191,7 @@ impl InstallerService {
             let version_service = VersionService::new();
             match version_service.check_version(tool).await {
                 Ok(info) => version_info = Some(info),
-                Err(e) => eprintln!("⚠️  无法检查镜像状态: {e}"),
+                Err(e) => tracing::warn!(error = ?e, "无法检查镜像状态"),
             }
         }
 
@@ -328,7 +328,7 @@ impl InstallerService {
             let version_service = VersionService::new();
             match version_service.check_version(tool).await {
                 Ok(info) => version_info = Some(info),
-                Err(e) => eprintln!("⚠️  无法检查镜像状态: {e}"),
+                Err(e) => tracing::warn!(error = ?e, "无法检查镜像状态"),
             }
         }
 

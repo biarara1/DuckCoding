@@ -127,10 +127,10 @@ pub fn init_logger(config: LogConfig) -> anyhow::Result<()> {
         let log_dir = match &config.log_dir {
             Some(dir) => dir.clone(),
             None => {
-                // 使用应用数据目录
-                let app_dir = dirs::data_local_dir()
-                    .ok_or_else(|| anyhow::anyhow!("无法获取应用数据目录"))?
-                    .join("DuckCoding")
+                // 使用用户主目录下的 .duckcoding/logs
+                let app_dir = dirs::home_dir()
+                    .ok_or_else(|| anyhow::anyhow!("无法获取用户主目录"))?
+                    .join(".duckcoding")
                     .join("logs");
 
                 std::fs::create_dir_all(&app_dir)?;

@@ -49,18 +49,18 @@ fn create_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 
 fn focus_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
-        println!("Focusing existing main window");
+        tracing::info!("聚焦主窗口");
         restore_window_state(&window);
     } else {
-        println!("Main window not found when trying to focus");
+        tracing::warn!("尝试聚焦时未找到主窗口");
     }
 }
 
 fn restore_window_state<R: Runtime>(window: &WebviewWindow<R>) {
-    println!(
-        "Restoring window state, is_visible={:?}, is_minimized={:?}",
-        window.is_visible(),
-        window.is_minimized()
+    tracing::debug!(
+        is_visible = ?window.is_visible(),
+        is_minimized = ?window.is_minimized(),
+        "恢复窗口状态"
     );
 
     #[cfg(target_os = "macos")]
@@ -77,17 +77,17 @@ fn restore_window_state<R: Runtime>(window: &WebviewWindow<R>) {
                 cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular,
             );
         }
-        println!("macOS Dock icon restored");
+        tracing::debug!("macOS Dock 图标已恢复");
     }
 
     if let Err(e) = window.show() {
-        println!("Error showing window: {e:?}");
+        tracing::error!(error = ?e, "显示窗口失败");
     }
     if let Err(e) = window.unminimize() {
-        println!("Error unminimizing window: {e:?}");
+        tracing::error!(error = ?e, "取消最小化窗口失败");
     }
     if let Err(e) = window.set_focus() {
-        println!("Error setting focus: {e:?}");
+        tracing::error!(error = ?e, "设置窗口焦点失败");
     }
 
     #[cfg(target_os = "macos")]
@@ -101,14 +101,14 @@ fn restore_window_state<R: Runtime>(window: &WebviewWindow<R>) {
             let ns_app = NSApplication::sharedApplication(nil);
             ns_app.activateIgnoringOtherApps_(YES);
         }
-        println!("macOS app activated");
+        tracing::debug!("macOS 应用已激活");
     }
 }
 
 fn hide_window_to_tray<R: Runtime>(window: &WebviewWindow<R>) {
-    println!("Hiding window to system tray");
+    tracing::info!("隐藏窗口到系统托盘");
     if let Err(e) = window.hide() {
-        println!("Failed to hide window: {e:?}");
+        tracing::error!(error = ?e, "隐藏窗口失败");
     }
 
     #[cfg(target_os = "macos")]
@@ -125,11 +125,22 @@ fn hide_window_to_tray<R: Runtime>(window: &WebviewWindow<R>) {
                 cocoa::appkit::NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory,
             );
         }
-        println!("macOS Dock icon hidden");
+        tracing::debug!("macOS Dock 图标已隐藏");
     }
 }
 
 fn main() {
+    // 🆕 初始化日志系统（必须在最前面）
+    use duckcoding::core::{init_logger, LogConfig};
+
+    let log_config = LogConfig::default();
+    if let Err(e) = init_logger(log_config) {
+        eprintln!("⚠️ 日志系统初始化失败: {}", e);
+        // 继续运行，但日志功能将不可用
+    }
+
+    tracing::info!("DuckCoding 应用启动");
+
     // 创建透明代理服务实例（旧架构，保持兼容）
     let transparent_proxy_port = 8787; // 默认端口,实际会从配置读取
     let transparent_proxy_service = TransparentProxyService::new(transparent_proxy_port);
@@ -168,7 +179,7 @@ fn main() {
 
             // 设置工作目录到项目根目录(跨平台支持)
             if let Ok(resource_dir) = app.path().resource_dir() {
-                println!("Resource dir: {resource_dir:?}");
+                tracing::debug!(resource_dir = ?resource_dir, "资源目录");
 
                 if cfg!(debug_assertions) {
                     // 开发模式: resource_dir 是 src-tauri/target/debug
@@ -179,7 +190,7 @@ fn main() {
                         .and_then(|p| p.parent()) // 项目根目录
                         .unwrap_or(&resource_dir);
 
-                    println!("Development mode, setting dir to: {project_root:?}");
+                    tracing::debug!(project_root = ?project_root, "开发模式，设置工作目录");
                     let _ = env::set_current_dir(project_root);
                 } else {
                     // 生产模式: 跨平台支持
@@ -196,12 +207,12 @@ fn main() {
                         // Linux: 通常在 /usr/share/appname 或类似位置
                         resource_dir.parent().unwrap_or(&resource_dir)
                     };
-                    println!("Production mode, setting dir to: {parent_dir:?}");
+                    tracing::debug!(parent_dir = ?parent_dir, "生产模式，设置工作目录");
                     let _ = env::set_current_dir(parent_dir);
                 }
             }
 
-            println!("Working directory: {:?}", env::current_dir());
+            tracing::info!(working_dir = ?env::current_dir(), "当前工作目录");
 
             // 创建系统托盘菜单
             let tray_menu = create_tray_menu(app.handle())?;
@@ -212,35 +223,35 @@ fn main() {
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(move |app, event| {
-                    println!("Tray menu event: {:?}", event.id);
+                    tracing::debug!(event_id = ?event.id, "托盘菜单事件");
                     match event.id.as_ref() {
                         "show" => {
-                            println!("Show window requested from tray menu");
+                            tracing::info!("从托盘显示窗口");
                             focus_main_window(app);
                         }
                         "check_update" => {
-                            println!("Check update requested from tray menu");
+                            tracing::info!("从托盘请求检查更新");
                             // 发送检查更新事件到前端
                             if let Err(e) = app.emit("request-check-update", ()) {
-                                eprintln!("Failed to emit request-check-update event: {:?}", e);
+                                tracing::error!(error = ?e, "发送更新检查事件失败");
                             }
                         }
                         "quit" => {
-                            println!("Quit requested from tray menu");
+                            tracing::info!("从托盘退出应用");
                             app.exit(0);
                         }
                         _ => {}
                     }
                 })
                 .on_tray_icon_event(move |_tray, event| {
-                    println!("Tray icon event received: {event:?}");
+                    tracing::trace!(event = ?event, "托盘图标事件");
                     match event {
                         TrayIconEvent::Click {
                             button: MouseButton::Left,
                             button_state: MouseButtonState::Up,
                             ..
                         } => {
-                            println!("Tray icon LEFT click detected");
+                            tracing::info!("托盘图标左键点击");
                             focus_main_window(&app_handle2);
                         }
                         _ => {
@@ -256,12 +267,13 @@ fn main() {
 
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        println!("Window close requested - prompting for action");
+                        tracing::info!("窗口关闭请求 - 提示用户选择操作");
                         // 阻止默认关闭行为
                         api.prevent_close();
                         if let Err(err) = window_clone.emit(CLOSE_CONFIRM_EVENT, ()) {
-                            println!(
-                                "Failed to emit close confirmation event, fallback to hiding: {err:?}"
+                            tracing::error!(
+                                error = ?err,
+                                "发送关闭确认事件失败，降级为隐藏窗口"
                             );
                             hide_window_to_tray(&window_clone);
                         }
@@ -274,25 +286,28 @@ fn main() {
             tauri::async_runtime::spawn(async move {
                 // 延迟1秒，避免影响启动速度
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                println!("Auto checking for updates on startup...");
+                tracing::info!("启动时自动检查更新");
 
                 // 获取 UpdateServiceState 并检查更新
                 let state = app_handle_for_update.state::<UpdateServiceState>();
                 match state.service.check_for_updates().await {
                     Ok(update_info) => {
                         if update_info.has_update {
-                            println!("Update available: {}", update_info.latest_version);
+                            tracing::info!(
+                                version = %update_info.latest_version,
+                                "发现新版本"
+                            );
                             if let Err(e) =
                                 app_handle_for_update.emit("update-available", &update_info)
                             {
-                                eprintln!("Failed to emit update-available event: {:?}", e);
+                                tracing::error!(error = ?e, "发送更新可用事件失败");
                             }
                         } else {
-                            println!("No update available, current version is latest");
+                            tracing::debug!("当前已是最新版本");
                         }
                     }
                     Err(e) => {
-                        eprintln!("Failed to check for updates on startup: {:?}", e);
+                        tracing::error!(error = ?e, "启动时检查更新失败");
                     }
                 }
             });
@@ -301,8 +316,10 @@ fn main() {
         })
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
-            println!(
-                "Secondary instance detected, args: {argv:?}, cwd: {cwd}"
+            tracing::info!(
+                argv = ?argv,
+                cwd = %cwd,
+                "检测到第二个实例"
             );
 
             if let Err(err) = app.emit(
@@ -312,7 +329,7 @@ fn main() {
                     cwd: cwd.clone(),
                 },
             ) {
-                println!("Failed to emit single-instance event: {err:?}");
+                tracing::error!(error = ?err, "发送单实例事件失败");
             }
 
             focus_main_window(app);
@@ -397,7 +414,7 @@ fn main() {
                 use objc::runtime::YES;
 
                 if let tauri::RunEvent::Reopen { .. } = event {
-                    println!("macOS Reopen event detected");
+                    tracing::info!("macOS Reopen 事件");
 
                     if let Some(window) = app_handle.get_webview_window("main") {
                         unsafe {
@@ -415,7 +432,7 @@ fn main() {
                             ns_app.activateIgnoringOtherApps_(YES);
                         }
 
-                        println!("Window restored from Dock/Cmd+Tab");
+                        tracing::debug!("从 Dock/Cmd+Tab 恢复窗口");
                     }
                 }
             }

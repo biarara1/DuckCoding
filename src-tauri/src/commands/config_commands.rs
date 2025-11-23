@@ -252,7 +252,7 @@ pub async fn configure_api(
     profile_name: Option<String>,
 ) -> Result<(), String> {
     #[cfg(debug_assertions)]
-    println!("Configuring {} (using ConfigService)", tool);
+    tracing::debug!(tool = %tool, "配置API（使用ConfigService）");
 
     // 获取工具定义
     let tool_obj = Tool::by_id(&tool).ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
@@ -273,7 +273,7 @@ pub async fn configure_api(
 #[tauri::command]
 pub async fn list_profiles(tool: String) -> Result<Vec<String>, String> {
     #[cfg(debug_assertions)]
-    println!("Listing profiles for {} (using ConfigService)", tool);
+    tracing::debug!(tool = %tool, "列出配置文件（使用ConfigService）");
 
     // 获取工具定义
     let tool_obj = Tool::by_id(&tool).ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
@@ -290,9 +290,10 @@ pub async fn switch_profile(
     manager_state: tauri::State<'_, ProxyManagerState>,
 ) -> Result<(), String> {
     #[cfg(debug_assertions)]
-    println!(
-        "Switching profile for {} to {} (using ConfigService)",
-        tool, profile
+    tracing::debug!(
+        tool = %tool,
+        profile = %profile,
+        "切换配置文件（使用ConfigService）"
     );
 
     // 获取工具定义
@@ -467,7 +468,7 @@ pub async fn switch_profile(
                         .await
                         .map_err(|e| format!("更新代理配置失败: {}", e))?;
 
-                    println!("✅ {} 透明代理配置已自动更新", tool);
+                    tracing::info!(tool = %tool, "透明代理配置已自动更新");
                 }
             }
 
@@ -494,12 +495,20 @@ pub async fn switch_profile(
                 drop(service);
             }
 
-            println!("✅ {} 配置已切换到 {} (代理模式)", tool, profile);
+            tracing::info!(
+                tool = %tool,
+                profile = %profile,
+                "配置已切换（代理模式）"
+            );
         }
     } else {
         // 非代理模式：正常激活配置
         ConfigService::activate_profile(&tool_obj, &profile).map_err(|e| e.to_string())?;
-        println!("✅ {} 配置已切换到 {}", tool, profile);
+        tracing::info!(
+            tool = %tool,
+            profile = %profile,
+            "配置已切换"
+        );
     }
 
     Ok(())
@@ -508,7 +517,11 @@ pub async fn switch_profile(
 #[tauri::command]
 pub async fn delete_profile(tool: String, profile: String) -> Result<(), String> {
     #[cfg(debug_assertions)]
-    println!("Deleting profile: tool={}, profile={}", tool, profile);
+    tracing::debug!(
+        tool = %tool,
+        profile = %profile,
+        "删除配置文件"
+    );
 
     // 获取工具定义
     let tool_obj = Tool::by_id(&tool).ok_or_else(|| format!("❌ 未知的工具: {}", tool))?;
@@ -517,7 +530,7 @@ pub async fn delete_profile(tool: String, profile: String) -> Result<(), String>
     ConfigService::delete_profile(&tool_obj, &profile).map_err(|e| e.to_string())?;
 
     #[cfg(debug_assertions)]
-    println!("Successfully deleted profile: {}", profile);
+    tracing::debug!(profile = %profile, "配置文件删除成功");
 
     Ok(())
 }

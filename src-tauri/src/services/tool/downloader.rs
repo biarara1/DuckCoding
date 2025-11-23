@@ -131,7 +131,11 @@ impl FileDownloader {
             Ok(response) => Ok(response.content_length()),
             Err(e) => {
                 // 如果HEAD请求失败，可能是服务器不支持HEAD请求，记录但不阻断下载
-                eprintln!("Warning: Failed to get file size with HEAD request: {e}");
+                tracing::warn!(
+                    error = ?e,
+                    url = %url,
+                    "HEAD 请求获取文件大小失败"
+                );
                 Ok(None)
             }
         }

@@ -104,11 +104,11 @@ pub async fn start_transparent_proxy(
     let (target_api_key, target_base_url) = TransparentProxyConfigService::get_real_config(&config)
         .map_err(|e| format!("获取真实配置失败: {e}"))?;
 
-    println!(
-        "🔑 真实 API Key: {}...",
-        &target_api_key[..4.min(target_api_key.len())]
+    tracing::debug!(
+        api_key_prefix = &target_api_key[..4.min(target_api_key.len())],
+        base_url = %target_base_url,
+        "真实 API 配置"
     );
-    println!("🌐 真实 Base URL: {target_base_url}");
 
     // 创建代理配置
     let proxy_config = ProxyConfig {
@@ -124,10 +124,16 @@ pub async fn start_transparent_proxy(
         if let Err(disable_err) =
             TransparentProxyConfigService::disable_transparent_proxy(&tool, &config)
         {
-            eprintln!("恢复 ClaudeCode 配置失败（代理启动错误后）: {disable_err}");
+            tracing::error!(
+                error = ?disable_err,
+                "恢复 ClaudeCode 配置失败（代理启动错误后）"
+            );
         }
         if let Err(save_err) = save_global_config(original_config).await {
-            eprintln!("恢复全局配置失败（代理启动错误后）: {save_err}");
+            tracing::error!(
+                error = ?save_err,
+                "恢复全局配置失败（代理启动错误后）"
+            );
         }
         return Err(format!("启动透明代理服务失败: {start_err}"));
     }
@@ -235,12 +241,11 @@ pub async fn update_transparent_proxy_config(
         .await
         .map_err(|e| format!("更新代理配置失败: {e}"))?;
 
-    println!("🔄 透明代理配置已更新:");
-    println!(
-        "   API Key: {}...",
-        &new_api_key[..4.min(new_api_key.len())]
+    tracing::info!(
+        api_key_prefix = &new_api_key[..4.min(new_api_key.len())],
+        base_url = %new_base_url,
+        "透明代理配置已更新"
     );
-    println!("   Base URL: {new_base_url}");
 
     Ok("✅ 透明代理配置已更新，无需重启".to_string())
 }
@@ -287,10 +292,10 @@ pub async fn test_proxy_request(
             scheme, auth, proxy_config.host, proxy_config.port
         );
 
-        println!(
-            "Testing with proxy: {}",
-            proxy_url.replace(&auth, "***:***@")
-        ); // 隐藏密码
+        tracing::debug!(
+            proxy_url = %proxy_url.replace(&auth, "***:***@"),
+            "测试代理请求"
+        );
 
         // 构建带代理的客户端
         match reqwest::Proxy::all(&proxy_url) {

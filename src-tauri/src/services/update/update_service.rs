@@ -245,7 +245,7 @@ impl UpdateService {
                         });
                     }
                     DownloadEvent::Failed(error) => {
-                        eprintln!("Download failed: {error}");
+                        tracing::error!(error = %error, "下载失败");
                         // 注意：这里不能使用await，需要在异步上下文中处理
                         progress_callback(DownloadProgress {
                             downloaded_bytes: 0,
@@ -447,7 +447,11 @@ impl UpdateService {
             .context("Failed to read update file metadata")?;
 
         let file_size = metadata.len();
-        println!("开始安装更新文件: {update_path} (大小: {file_size} bytes)");
+        tracing::info!(
+            update_path = %update_path,
+            file_size = file_size,
+            "开始安装更新文件"
+        );
 
         // 3. 根据文件扩展名执行安装
         let file_name = file_path
@@ -459,18 +463,18 @@ impl UpdateService {
         {
             // Windows 处理
             if file_name.ends_with(".exe") {
-                println!("启动 Windows .exe 安装程序: {update_path}");
+                tracing::info!(update_path = %update_path, "启动 Windows EXE 安装程序");
 
                 // 直接启动 EXE 安装程序，不使用任何静默参数，让用户看到标准的安装界面
                 match tokio::process::Command::new(update_path).spawn() {
                     Ok(mut child) => {
-                        println!("已启动安装程序，显示标准安装界面");
+                        tracing::info!("已启动安装程序，显示标准安装界面");
 
                         // 等待安装程序完成
                         match child.wait().await {
                             Ok(status) => {
                                 if status.success() {
-                                    println!("用户完成了 .exe 安装");
+                                    tracing::info!("用户完成了 EXE 安装");
                                     return Ok(());
                                 } else {
                                     let exit_code = status.code().unwrap_or(-1);
@@ -486,13 +490,13 @@ impl UpdateService {
                     }
                     Err(_e) => {
                         // 如果直接启动失败，尝试用资源管理器打开文件
-                        println!("直接启动 EXE 失败，尝试用资源管理器打开文件");
+                        tracing::warn!("直接启动 EXE 失败，尝试用资源管理器打开文件");
                         match tokio::process::Command::new("explorer")
                             .arg(update_path)
                             .spawn()
                         {
                             Ok(_) => {
-                                println!("已用资源管理器打开 EXE 文件，请手动完成安装");
+                                tracing::info!("已用资源管理器打开 EXE 文件，请手动完成安装");
                                 // 等待几秒钟给用户看到文件管理器
                                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
                                 return Ok(());
@@ -506,7 +510,7 @@ impl UpdateService {
                     }
                 }
             } else if file_name.ends_with(".msi") {
-                println!("执行 Windows MSI 安装程序");
+                tracing::info!("执行 Windows MSI 安装程序");
 
                 // 尝试多种 MSI 安装方式
                 let install_methods = [
@@ -519,13 +523,13 @@ impl UpdateService {
                 let mut last_error = None;
 
                 for (i, args) in install_methods.iter().enumerate() {
-                    println!("尝试 MSI 安装方法 {}: {:?}", i + 1, args);
+                    tracing::debug!(method = i + 1, args = ?args, "尝试 MSI 安装方法");
 
                     match tokio::process::Command::new("msiexec").args(args).spawn() {
                         Ok(mut child) => match child.wait().await {
                             Ok(status) => {
                                 if status.success() {
-                                    println!("MSI 安装成功 (方法 {})", i + 1);
+                                    tracing::info!(method = i + 1, "MSI 安装成功");
                                     return Ok(());
                                 } else {
                                     let error_msg = format!(
@@ -533,21 +537,21 @@ impl UpdateService {
                                         i + 1,
                                         status.code()
                                     );
-                                    println!("{error_msg}");
+                                    tracing::warn!("{}", error_msg);
                                     last_error = Some(anyhow!(error_msg));
                                 }
                             }
                             Err(e) => {
                                 let error_msg =
                                     format!("MSI installer (方法 {}) wait failed: {}", i + 1, e);
-                                println!("{error_msg}");
+                                tracing::warn!("{}", error_msg);
                                 last_error = Some(anyhow!(error_msg));
                             }
                         },
                         Err(e) => {
                             let error_msg =
                                 format!("Failed to start MSI installer (方法 {}): {}", i + 1, e);
-                            println!("{error_msg}");
+                            tracing::warn!("{}", error_msg);
                             last_error = Some(anyhow!(error_msg));
                         }
                     }
@@ -557,13 +561,13 @@ impl UpdateService {
                 }
 
                 // 如果所有方法都失败了，尝试用资源管理器打开文件
-                println!("所有 MSI 安装方法都失败，尝试用资源管理器打开文件");
+                tracing::warn!("所有 MSI 安装方法都失败，尝试用资源管理器打开文件");
                 match tokio::process::Command::new("explorer")
                     .arg(update_path)
                     .spawn()
                 {
                     Ok(_) => {
-                        println!("已用资源管理器打开 MSI 文件，请手动安装");
+                        tracing::info!("已用资源管理器打开 MSI 文件，请手动安装");
                         return Ok(()); // 不报错，让用户手动安装
                     }
                     Err(e) => {
@@ -572,7 +576,7 @@ impl UpdateService {
                 }
             } else {
                 // 其他格式，尝试打开文件资源管理器
-                println!("尝试打开文件资源管理器: {update_path}");
+                tracing::info!(update_path = %update_path, "尝试打开文件资源管理器");
                 tokio::process::Command::new("explorer")
                     .arg("/select,")
                     .arg(update_path)
@@ -584,11 +588,11 @@ impl UpdateService {
         #[cfg(target_os = "macos")]
         {
             if file_name.ends_with(".dmg") {
-                println!("准备安装 macOS DMG 包: {}", update_path);
+                tracing::info!(update_path = %update_path, "准备安装 macOS DMG 包");
                 self.install_dmg_package(update_path).await?;
             } else if file_name.ends_with(".pkg") {
                 // macOS 安装包
-                println!("执行 macOS PKG 安装程序");
+                tracing::info!("执行 macOS PKG 安装程序");
                 let mut child = tokio::process::Command::new("open")
                     .arg(update_path)
                     .spawn()
@@ -603,7 +607,7 @@ impl UpdateService {
                 }
             } else {
                 // 其他格式，尝试用 Finder 打开
-                println!("尝试用 Finder 打开: {}", update_path);
+                tracing::info!(update_path = %update_path, "尝试用 Finder 打开");
                 tokio::process::Command::new("open")
                     .arg(update_path)
                     .spawn()
@@ -615,12 +619,12 @@ impl UpdateService {
         {
             if file_name.ends_with(".AppImage") {
                 // AppImage 安装
-                println!("设置 AppImage 执行权限");
+                tracing::info!("设置 AppImage 执行权限");
                 tokio::fs::set_permissions(update_path, std::fs::Permissions::from_mode(0o755))
                     .await
                     .context("Failed to set execute permissions")?;
 
-                println!("启动 AppImage: {}", update_path);
+                tracing::info!(update_path = %update_path, "启动 AppImage");
                 let mut child = tokio::process::Command::new(update_path)
                     .spawn()
                     .context("Failed to start AppImage")?;
@@ -633,7 +637,7 @@ impl UpdateService {
                     ));
                 }
             } else if file_name.ends_with(".deb") {
-                println!("执行 DEB 包安装");
+                tracing::info!("执行 DEB 包安装");
                 let mut child = tokio::process::Command::new("sudo")
                     .arg("apt")
                     .arg("install")
@@ -650,7 +654,7 @@ impl UpdateService {
                     ));
                 }
             } else if file_name.ends_with(".rpm") {
-                println!("执行 RPM 包安装");
+                tracing::info!("执行 RPM 包安装");
                 let mut child = tokio::process::Command::new("sudo")
                     .arg("dnf")
                     .arg("install")
@@ -668,7 +672,7 @@ impl UpdateService {
                 }
             } else {
                 // 其他格式，尝试用系统默认程序打开
-                println!("尝试用系统默认程序打开: {}", update_path);
+                tracing::info!(update_path = %update_path, "尝试用系统默认程序打开");
                 tokio::process::Command::new("xdg-open")
                     .arg(update_path)
                     .spawn()
@@ -676,7 +680,7 @@ impl UpdateService {
             }
         }
 
-        println!("安装过程完成");
+        tracing::info!("安装过程完成");
         Ok(())
     }
 
@@ -768,7 +772,7 @@ impl UpdateService {
                 .context("Failed to create target application directory")?;
         }
 
-        println!("复制新的应用程序包到 {:?} (来源 {:?})", target, source);
+        tracing::info!(target = ?target, source = ?source, "复制新的应用程序包");
         let status = Command::new("ditto")
             .arg(source)
             .arg(target)
