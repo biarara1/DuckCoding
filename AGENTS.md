@@ -1,6 +1,6 @@
 ---
 agent: Codex
-last-updated: 2025-11-18
+last-updated: 2025-11-23
 ---
 
 # DuckCoding 开发协作规范
@@ -64,10 +64,14 @@ last-updated: 2025-11-18
   - 旧的 `transparent_proxy_*` 字段会在读取配置时自动迁移到新结构
   - 新命令：`start_tool_proxy`、`stop_tool_proxy`、`get_all_proxy_status`
   - 旧命令保持兼容，内部使用新架构实现
+  - `ToolProxyConfig` 额外存储 `real_profile_name`、`auto_start`、工具级 `session_endpoint_config_enabled`，全局配置新增 `hide_transparent_proxy_tip` 控制设置页横幅显示
+  - 应用启动时 `duckcoding::auto_start_proxies` 会读取配置，满足 `enabled && auto_start` 且存在 `local_api_key` 的代理会自动启动
+  - `utils::config::migrate_session_config` 会将旧版 `GlobalConfig.session_endpoint_config_enabled` 自动迁移到各工具配置，确保升级过程不会丢开关
 - 全局配置读写统一走 `utils::config::{read_global_config, write_global_config, apply_proxy_if_configured}`，避免出现多份路径逻辑；任何命令要修改配置都应调用这些辅助函数。
 - UpdateService / 统计命令等都通过 `tauri::State` 注入复用，前端 ToolStatus 的结构保持轻量字段 `{id,name,installed,version}`。
+- 工具安装状态由 `services::tool::ToolStatusCache` 并行检测与缓存，`check_installations`/`refresh_tool_status` 命令复用该缓存；安装/更新成功后或手动刷新会清空命中的工具缓存。
 - UI 相关的托盘/窗口操作集中在 `src-tauri/src/ui/*`，其它模块如需最小化到托盘请调用 `ui::hide_window_to_tray` 等封装方法。
-- 新增 `TransparentProxyPage` 与会话数据库：`SESSION_MANAGER` 使用 SQLite 记录每个代理会话的 endpoint/API Key，前端可按工具启停代理、查看历史并启用「会话级 Endpoint 配置」开关。
+- 新增 `TransparentProxyPage` 与会话数据库：`SESSION_MANAGER` 使用 SQLite 记录每个代理会话的 endpoint/API Key，前端可按工具启停代理、查看历史并启用「会话级 Endpoint 配置」开关。页面内的 `ProxyControlBar`、`ProxySettingsDialog`、`ProxyConfigDialog` 负责代理启停、配置切换、工具级设置并内建缺失配置提示。
 
 ### 透明代理扩展指南
 
