@@ -1,6 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// 工具状态
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolStatus {
+    pub id: String,
+    pub name: String,
+    pub installed: bool,
+    pub version: Option<String>,
+}
+
 /// 工具定义
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
