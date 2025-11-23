@@ -440,6 +440,11 @@ pub async fn switch_profile(
             )
             .map_err(|e| format!("更新真实配置失败: {}", e))?;
 
+            // 同时保存配置名称
+            if let Some(proxy_config) = global_config.get_proxy_config_mut(&tool) {
+                proxy_config.real_profile_name = Some(profile.clone());
+            }
+
             // 保存全局配置
             save_global_config(global_config.clone())
                 .await
@@ -454,6 +459,7 @@ pub async fn switch_profile(
                     let mut updated_config = tool_config.clone();
                     updated_config.real_api_key = Some(new_api_key.clone());
                     updated_config.real_base_url = Some(new_base_url.clone());
+                    updated_config.real_profile_name = Some(profile.clone());
 
                     manager_state
                         .manager
