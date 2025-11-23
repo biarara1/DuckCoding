@@ -13,7 +13,11 @@ pub struct ToolProxyConfig {
     pub real_api_key: Option<String>,        // 备份的真实 API Key
     pub real_base_url: Option<String>,       // 备份的真实 Base URL
     pub real_model_provider: Option<String>, // 备份的 model_provider (Codex 专用)
+    #[serde(default)]
+    pub real_profile_name: Option<String>, // 备份的配置名称
     pub allow_public: bool,
+    #[serde(default)]
+    pub session_endpoint_config_enabled: bool, // 工具级：是否允许会话自定义端点
 }
 
 impl Default for ToolProxyConfig {
@@ -25,7 +29,9 @@ impl Default for ToolProxyConfig {
             real_api_key: None,
             real_base_url: None,
             real_model_provider: None,
+            real_profile_name: None,
             allow_public: false,
+            session_endpoint_config_enabled: false,
         }
     }
 }
@@ -87,7 +93,9 @@ fn default_proxy_configs() -> HashMap<String, ToolProxyConfig> {
             real_api_key: None,
             real_base_url: None,
             real_model_provider: None,
+            real_profile_name: None,
             allow_public: false,
+            session_endpoint_config_enabled: false,
         },
     );
 
@@ -100,7 +108,9 @@ fn default_proxy_configs() -> HashMap<String, ToolProxyConfig> {
             real_api_key: None,
             real_base_url: None,
             real_model_provider: None,
+            real_profile_name: None,
             allow_public: false,
+            session_endpoint_config_enabled: false,
         },
     );
 
@@ -113,7 +123,9 @@ fn default_proxy_configs() -> HashMap<String, ToolProxyConfig> {
             real_api_key: None,
             real_base_url: None,
             real_model_provider: None,
+            real_profile_name: None,
             allow_public: false,
+            session_endpoint_config_enabled: false,
         },
     );
 
@@ -142,7 +154,25 @@ impl GlobalConfig {
                 real_api_key: None,
                 real_base_url: None,
                 real_model_provider: None,
+                real_profile_name: None,
                 allow_public: false,
+                session_endpoint_config_enabled: false,
             });
+    }
+
+    /// 自动迁移旧的全局会话开关到工具级
+    /// 如果全局开关已启用，则将其值迁移到每个工具的配置中
+    pub fn migrate_session_config(&mut self) {
+        // 仅在全局开关为 true 时进行迁移
+        if self.session_endpoint_config_enabled {
+            for config in self.proxy_configs.values_mut() {
+                // 仅迁移尚未设置的工具
+                if !config.session_endpoint_config_enabled {
+                    config.session_endpoint_config_enabled = true;
+                }
+            }
+            // 迁移完成后，保留旧字段但不再使用（向后兼容）
+            // 可选：self.session_endpoint_config_enabled = false;
+        }
     }
 }
