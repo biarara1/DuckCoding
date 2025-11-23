@@ -62,6 +62,7 @@ export function ProxySettingsDialog({
   const [sessionEndpointEnabled, setSessionEndpointEnabled] = useState(
     config?.session_endpoint_config_enabled ?? false,
   );
+  const [autoStart, setAutoStart] = useState(config?.auto_start ?? false);
 
   // 打开弹窗时重置表单状态
   useEffect(() => {
@@ -71,6 +72,7 @@ export function ProxySettingsDialog({
       setLocalApiKey(config.local_api_key ?? '');
       setAllowPublic(config.allow_public);
       setSessionEndpointEnabled(config.session_endpoint_config_enabled ?? false);
+      setAutoStart(config.auto_start ?? false);
     }
   }, [open, config]);
 
@@ -125,6 +127,7 @@ export function ProxySettingsDialog({
         local_api_key: localApiKey || null,
         allow_public: allowPublic,
         session_endpoint_config_enabled: sessionEndpointEnabled,
+        auto_start: autoStart,
       });
       toast({
         title: '配置已保存',
@@ -240,6 +243,15 @@ export function ProxySettingsDialog({
                   checked={sessionEndpointEnabled}
                   onCheckedChange={setSessionEndpointEnabled}
                 />
+              </div>
+
+              {/* 应用启动时自动运行 */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>应用启动时自动运行</Label>
+                  <p className="text-xs text-muted-foreground">启动 DuckCoding 时自动启动此代理</p>
+                </div>
+                <Switch checked={autoStart} onCheckedChange={setAutoStart} />
               </div>
             </>
           )}

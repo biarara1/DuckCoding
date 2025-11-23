@@ -53,6 +53,7 @@ function getDefaultToolConfig(toolId: string): ToolProxyConfig {
     real_profile_name: null,
     allow_public: false,
     session_endpoint_config_enabled: false,
+    auto_start: false,
   };
 }
 

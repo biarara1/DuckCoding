@@ -104,6 +104,7 @@ export function useToolProxyData() {
         real_profile_name: null,
         allow_public: false,
         session_endpoint_config_enabled: false,
+        auto_start: false,
       };
 
       const updatedConfig: ToolProxyConfig = {
